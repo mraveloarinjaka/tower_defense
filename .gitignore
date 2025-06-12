@@ -1,0 +1,4 @@
+? .clj-kondo/
+? .lsp/
+/src.bin.dSYM/
+/src.bin

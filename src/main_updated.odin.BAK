@@ -1,0 +1,37 @@
+package main
+
+import "core:fmt"
+import "core:math/rand"
+import "core:time"
+import rl "../vendor/raylib-odin"
+import "./game"
+
+main :: proc() {
+    // Initialize window
+    rl.init_window(game.SCREEN_WIDTH, game.SCREEN_HEIGHT, game.TITLE)
+    defer rl.close_window()
+    
+    rl.set_target_fps(game.TARGET_FPS)
+    
+    // Initialize random seed
+    rand.set_seed(u64(time.now()._nsec))
+    
+    // Initialize game
+    game_ctx := game.init_game()
+    defer game.destroy_game(&game_ctx)
+    
+    // Main game loop
+    for !rl.window_should_close() {
+        // Calculate delta time
+        delta_time := rl.get_frame_time()
+        
+        // Handle input
+        game.handle_input(&game_ctx)
+        
+        // Update game
+        game.update_game(&game_ctx, delta_time)
+        
+        // Draw game
+        game.draw_game(&game_ctx)
+    }
+}
