@@ -74,13 +74,11 @@ draw_game :: proc(renderer: ^Renderer) {
 				draw_enemy(renderer, enemy.id, {}, enemy.health, enemy.max_health)
 			}
 		}
-
-		//// Draw projectiles
-		//for projectile in game.projectiles {
-		//   if projectile.active {
-		//      renderer.draw_projectile(&renderer, projectile.id)
-		//   }
-		//}
+		for projectile in  renderer.world.projectiles {
+			if projectile.active {
+				draw_projectile(renderer, projectile.id)
+			}
+		}
 
 		draw_hud(renderer)
 	} else if renderer.world.state == .GAME_OVER {
@@ -104,7 +102,7 @@ draw_tower :: proc(
 
 	// Draw range indicator if specified
 	if range > 0 {
-		x, y := physics.get_body_position(renderer.world.physics, body_name)
+		x, y := physics.get_body_position(&renderer.world.physics, body_name)
 
 		// Draw range circle with transparency
 		range_color := rl.SKYBLUE

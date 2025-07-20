@@ -7,6 +7,7 @@ import "core:math"
 import "core:math/rand"
 import "core:strings"
 import "core:time"
+
 import rl "vendor:raylib"
 
 // Game constants
@@ -119,7 +120,9 @@ init_game :: proc() -> Game {
 
 // Clean up game resources
 destroy_game :: proc(game: ^Game) {
-	// Clean up dynamic arrays
+	for &projectile in game.projectiles {
+		destroy_projectile(&projectile)
+	}
 	delete(game.projectiles)
 	for &enemy in game.enemies {
 		destroy_enemy(&enemy)
@@ -199,23 +202,24 @@ destroy_enemy :: proc(enemy: ^Enemy) {
 	delete(enemy.id)
 }
 
-// Create a projectile
-create_projectile :: proc(game: ^Game, x, y: f32, target: string, damage: int) -> Projectile {
+create_projectile :: proc(game: ^Game, source, target: string, damage: int) -> Projectile {
 	projectile: Projectile
 
-	// Generate unique ID
 	game.projectile_count += 1
-	projectile.id = fmt.tprintf("projectile_%d", game.projectile_count)
-
+	projectile.id = strings.clone(fmt.tprintf("projectile_%d", game.projectile_count))
 	projectile.damage = damage
 	projectile.speed = 200
 	projectile.target = target
 	projectile.active = true
 
-	// Create physics body
-	physics.create_dynamic_body(&game.physics, projectile.id, {x, y}, 5)
+	source_x, source_y := physics.get_body_position(&game.physics, source)
+	physics.create_dynamic_body(&game.physics, projectile.id, {source_x, source_y}, 5)
 
 	return projectile
+}
+
+destroy_projectile :: proc(projectile: ^Projectile) {
+	delete(projectile.id)
 }
 
 // Update the game state
@@ -267,24 +271,15 @@ update_tower :: proc(game: ^Game, delta_time: f32) {
 
 	// Attack target if available and cooldown is ready
 	if game.tower.target != "" && game.tower.cooldown_timer <= 0 {
-		// Get tower position
-		tower_x, tower_y := physics.get_body_position(game.physics, game.tower.id)
 
-		// Get target position
-		target_x, target_y := physics.get_body_position(game.physics, game.tower.target)
-
-		// Calculate distance
-		dx := target_x - tower_x
-		dy := target_y - tower_y
-		distance := math.sqrt(dx * dx + dy * dy)
+		distance := physics.distance(&game.physics, game.tower.id, game.tower.target)
 
 		// Check if target is within range
 		if distance <= game.tower.range {
 			// Fire projectile
 			projectile := create_projectile(
 				game,
-				tower_x,
-				tower_y,
+				game.tower.id,
 				game.tower.target,
 				game.tower.damage,
 			)
@@ -298,7 +293,7 @@ update_tower :: proc(game: ^Game, delta_time: f32) {
 
 // Update enemies state
 update_enemies :: proc(game: ^Game, delta_time: f32) {
-	tower_x, tower_y := physics.get_body_position(game.physics, game.tower.id)
+	tower_x, tower_y := physics.get_body_position(&game.physics, game.tower.id)
 
 	for &enemy in game.enemies {
 		//if !game.enemies[i].active {
@@ -306,7 +301,7 @@ update_enemies :: proc(game: ^Game, delta_time: f32) {
 		//}
 
 		// Move towards tower
-		physics.move_body_towards(&game.physics, enemy.id, tower_x, tower_y, enemy.speed)
+		physics.move_body_towards(&game.physics, enemy.id, game.tower.id, enemy.speed)
 
 		//// Check collision with tower
 		//if physics.check_collision(&game.physics, game.enemies[i].id, game.tower.id) {
@@ -337,52 +332,44 @@ update_enemies :: proc(game: ^Game, delta_time: f32) {
 
 // Update projectiles state
 update_projectiles :: proc(game: ^Game, delta_time: f32) {
-	for i := 0; i < len(game.projectiles); i += 1 {
-		if !game.projectiles[i].active {
+	for &projectile, index in game.projectiles {
+
+		if !projectile.active {
 			continue
 		}
 
-		// Check if target still exists
-		target_index := find_enemy_by_id(game, game.projectiles[i].target)
+		target_index := find_enemy_by_id(game, projectile.target)
 		if target_index < 0 {
 			// Target no longer exists, deactivate projectile
-			game.projectiles[i].active = false
-			physics.remove_body(&game.physics, game.projectiles[i].id)
+			projectile.active = false
+			physics.remove_body(&game.physics, projectile.id)
 			continue
 		}
 
-		// Move towards target
-		target_x, target_y := physics.get_body_position(game.physics, game.projectiles[i].target)
 		physics.move_body_towards(
 			&game.physics,
-			game.projectiles[i].id,
-			target_x,
-			target_y,
-			game.projectiles[i].speed,
+			projectile.id,
+			projectile.target,
+			projectile.speed,
 		)
 
 		// Check collision with target
-		if physics.check_collision(
-			&game.physics,
-			game.projectiles[i].id,
-			game.projectiles[i].target,
-		) {
-			// Damage enemy
-			game.enemies[target_index].health -= game.projectiles[i].damage
+		if physics.check_collision(&game.physics, projectile.id, projectile.target) {
+			//// Damage enemy
+			//game.enemies[target_index].health -= projectile.damage
 
-			// Check if enemy is defeated
-			if game.enemies[target_index].health <= 0 {
-				// Add score
-				game.score += game.enemies[target_index].value
+			//// Check if enemy is defeated
+			//if game.enemies[target_index].health <= 0 {
+			//   // Add score
+			//   game.score += game.enemies[target_index].value
 
-				// Deactivate enemy
-				game.enemies[target_index].active = false
-				physics.remove_body(&game.physics, game.enemies[target_index].id)
-			}
-
+			//   // Deactivate enemy
+			//   game.enemies[target_index].active = false
+			//   physics.remove_body(&game.physics, game.enemies[target_index].id)
+			//}
 			// Deactivate projectile
-			game.projectiles[i].active = false
-			physics.remove_body(&game.physics, game.projectiles[i].id)
+			projectile.active = false
+			physics.remove_body(&game.physics, projectile.id)
 		}
 	}
 
@@ -447,7 +434,7 @@ find_closest_enemy :: proc(game: ^Game) -> string {
 		return ""
 	}
 
-	tower_x, tower_y := physics.get_body_position(game.physics, game.tower.id)
+	tower_x, tower_y := physics.get_body_position(&game.physics, game.tower.id)
 	closest_distance := f32(1000000)
 	closest_id := ""
 
@@ -456,7 +443,7 @@ find_closest_enemy :: proc(game: ^Game) -> string {
 			continue
 		}
 
-		enemy_x, enemy_y := physics.get_body_position(game.physics, enemy.id)
+		enemy_x, enemy_y := physics.get_body_position(&game.physics, enemy.id)
 
 		dx := enemy_x - tower_x
 		dy := enemy_y - tower_y

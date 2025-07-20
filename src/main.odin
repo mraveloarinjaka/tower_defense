@@ -1,13 +1,18 @@
 package main
 
 import "core:fmt"
+import "core:log"
 import "core:math/rand"
 import "core:time"
 import "game"
 import "renderer"
+
 import rl "vendor:raylib"
 
 main :: proc() {
+	context.logger = log.create_console_logger()
+	context.logger.lowest_level = log.Level.Debug
+
 	// Initialize window
 	rl.InitWindow(game.SCREEN_WIDTH, game.SCREEN_HEIGHT, game.TITLE)
 	defer rl.CloseWindow()
