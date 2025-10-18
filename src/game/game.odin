@@ -481,7 +481,13 @@ find_enemy_by_id :: proc(game: ^Game, id: string) -> int {
 }
 
 // Handle input
-handle_input :: proc(game: ^Game) {
+
+InputResult :: enum {
+	CONTINUE,
+	QUIT,
+}
+
+handle_input :: proc(game: ^Game) -> (result: InputResult = .CONTINUE) {
 	if game.state == .MENU {
 		if rl.IsKeyPressed(.ENTER) {
 			game.state = .PLAYING
@@ -490,6 +496,9 @@ handle_input :: proc(game: ^Game) {
 			rand.reset(u64(time.now()._nsec))
 		}
 	} else if game.state == .PLAYING {
+		if rl.IsKeyPressed(.ESCAPE) {
+			game.state = .GAME_OVER
+		}
 		// Toggle debug mode with F1
 		//if rl.IsKeyPressed(.F1) {
 		//   renderer.toggle_debug_mode(&game.renderer)
@@ -502,6 +511,9 @@ handle_input :: proc(game: ^Game) {
 			// Reinitialize game
 			new_game := init_game()
 			game^ = new_game
+		} else if rl.IsKeyPressed(.ESCAPE) {
+			result = .QUIT
 		}
 	}
+	return
 }

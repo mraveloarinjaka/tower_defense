@@ -16,6 +16,7 @@ main :: proc() {
 	// Initialize window
 	rl.InitWindow(game.SCREEN_WIDTH, game.SCREEN_HEIGHT, game.TITLE)
 	defer rl.CloseWindow()
+	rl.SetExitKey(.KEY_NULL)
 
 	rl.SetTargetFPS(game.TARGET_FPS)
 
@@ -28,12 +29,14 @@ main :: proc() {
 	game_renderer := renderer.init_renderer(&game_state)
 
 	// Main game loop
-	for !rl.WindowShouldClose() {
+	game_loop: for !rl.WindowShouldClose() {
+		// Handle input
+		if game.handle_input(&game_state) == .QUIT {
+			break game_loop
+		}
+
 		// Calculate delta time
 		delta_time := rl.GetFrameTime()
-
-		// Handle input
-		game.handle_input(&game_state)
 
 		// Update game
 		game.update_game(&game_state, delta_time)
