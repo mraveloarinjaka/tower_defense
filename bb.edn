@@ -1,0 +1,4 @@
+{:tasks {compile (shell "odin build ./src -debug -out:tower_defense_game")
+         clean (shell "rm -rf ./tower_defense_game ./tower_defense_game.dSYM")
+         start {:depends [clean compile]
+                :task (shell "./tower_defense_game")}}}
