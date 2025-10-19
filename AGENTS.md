@@ -1,22 +1,22 @@
 # Agent Guidelines for Tower Defense
-- Build: `odin build src -out:src.bin`
-- Run: `./src.bin` or `odin run src`
+- Prerequisites: Odin, LLVM (`brew install llvm`), Xcode Command Line Tools
+- Build: `cd src && odin build . -out:../tower_defense_game` OR `odin build src -out:tower_defense_game`
+- Run: `./tower_defense_game` or `odin run src`
 - Tests: none configured (no single-test command)
 - Lint: none configured
 - Entry: `src/main.odin`; packages: `game/`, `physics/`, `renderer/`
-- Vendors: Raylib (`rl "vendor:raylib"`), Box2D (`b2 "vendor:box2d"`)
+- Vendors: Raylib (`rl "vendor:raylib"`), Box2D (`b2 "vendor:box2d"`) in `vendor/` directory
+- Controls: Enter (start/restart), F1 (toggle debug), ESC (exit)
 - Imports: stdlib first, then local, then vendor; use qualified aliases
-- Constants: `::` (e.g., `SCREEN_WIDTH :: 1024`)
-- Procedures: `name :: proc(...) { }`
 - Types: PascalCase; structs/enums with `::`
 - Variables: snake_case; constants UPPER_CASE
-- Pointers: `^Type`; take address with `&x`
 - Memory: use `defer` for cleanup; call `free_all(context.temp_allocator)` each frame
 - Errors: use comma-ok (e.g., `v, ok := map[key]`); early-return on missing
 - Logging: use `core:log` console logger; set `lowest_level` as needed
-- Time/Random: seed with `rand.reset(u64(time.now()._nsec))`
 - Physics: `PHYSICS_SCALE :: 30.0`; convert via `toWorldPosition()`
 - Rendering: draw via Raylib; toggle debug with internal flag
 - Coordinates: 30 px = 1 m (Box2D↔Raylib)
+- Integration: Box2D physics → game logic → Raylib rendering
 - Commits: `[TYPE] (context): message` (e.g., `[FIX] (entities): correctly render enemies`)
 - Cursor/Copilot: no rules detected in repo
+
