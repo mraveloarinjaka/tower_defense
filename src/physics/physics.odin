@@ -263,38 +263,6 @@ get_body_position :: proc(physics: ^PhysicsWorld, body_name: string) -> (x, y: f
 	return position.x * PHYSICS_SCALE, position.y * PHYSICS_SCALE
 }
 
-// Check if two bodies are colliding
-check_collision :: proc(physics: ^PhysicsWorld, body_name_a, body_name_b: string) -> bool {
-	body_a, exists_a := physics.bodies[body_name_a]
-	if !exists_a {
-		return false
-	}
-	body_b, exists_b := physics.bodies[body_name_b]
-	if !exists_b {
-		return false
-	}
-
-	// Get first shape of each body
-	tmp: [2]b2.ShapeId
-	shapes_a := b2.Body_GetShapes(body_a, tmp[0:1])
-	shapes_b := b2.Body_GetShapes(body_b, tmp[1:])
-	if shapes_a == nil || shapes_b == nil {
-		return false
-	}
-
-	shape_a := shapes_a[0]
-	shape_b := shapes_b[0]
-
-	// Overlap test using current transforms
-	xf_a := b2.Body_GetTransform(body_a)
-	xf_b := b2.Body_GetTransform(body_b)
-
-	// If your binding exposes Shape_TestOverlap instead, swap the call accordingly.
-	//return b2.Shape_TestOverlap(shape_a, 0, shape_b, 0, xf_a, xf_b)
-	return false
-}
-
-
 // Calculate distance between two bodies
 calculate_distance :: proc(physics: ^PhysicsWorld, body_name_a, body_name_b: string) -> f32 {
 	x1, y1 := get_body_position(physics, body_name_a)
@@ -380,10 +348,13 @@ distance :: proc(world: ^PhysicsWorld, from, to: string) -> f32 {
 	return math.sqrt(dx * dx + dy * dy)
 }
 
-Colliding :: map[string]struct{}
+Colliding :: struct {
+	projectiles_to_enemies: map[string]string,
+	enemies_to_projectiles: map[string]string,
+}
 
 check_collisions :: proc(physics: ^PhysicsWorld) -> Colliding {
-	colliding : Colliding
+	colliding: Colliding
 	events := b2.World_GetContactEvents(physics.world)
 	if events.beginCount > 0 {
 		for event_idx in 0 ..< events.beginCount {
@@ -392,14 +363,20 @@ check_collisions :: proc(physics: ^PhysicsWorld) -> Colliding {
 			bodyB := b2.Shape_GetBody(event.shapeIdB)
 			if (bodyA in physics.projectiles && bodyB in physics.enemies) ||
 			   (bodyA in physics.enemies && bodyB in physics.projectiles) {
-				if name, ok := physics.projectiles[bodyA]; ok {
-					log.debugf("collision detected with projectile %v", name)
-					colliding[name] = {}
+				enemy: string
+				projectile: string
+
+				if bodyA in physics.projectiles {
+					enemy = physics.enemies[bodyB]
+					projectile = physics.projectiles[bodyA]
 				}
-				if name, ok := physics.projectiles[bodyB]; ok {
-					log.debugf("collision detected with projectile %v", name)
-					colliding[name] = {}
+				if bodyA in physics.enemies {
+					enemy = physics.enemies[bodyA]
+					projectile = physics.projectiles[bodyB]
 				}
+				log.debugf("enemy %v hit by projectile %v", enemy, projectile)
+				colliding.projectiles_to_enemies[projectile] = enemy
+				colliding.enemies_to_projectiles[enemy] = projectile
 			}
 		}
 	}

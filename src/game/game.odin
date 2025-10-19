@@ -231,11 +231,17 @@ update_game :: proc(game: ^Game, delta_time: f32) {
 		// Update tower
 		update_tower(game, delta_time)
 
+		collisions := physics.check_collisions(&game.physics)
+		defer {
+			delete(collisions.enemies_to_projectiles)
+			delete(collisions.projectiles_to_enemies)
+		}
+
 		// Update enemies
-		update_enemies(game, delta_time)
+		update_enemies(game, collisions, delta_time)
 
 		// Update projectiles
-		update_projectiles(game, delta_time)
+		update_projectiles(game, collisions, delta_time)
 
 		// Handle enemy spawning
 		game.spawn_timer -= delta_time
@@ -289,13 +295,18 @@ update_tower :: proc(game: ^Game, delta_time: f32) {
 }
 
 // Update enemies state
-update_enemies :: proc(game: ^Game, delta_time: f32) {
+update_enemies :: proc(game: ^Game, collisions: physics.Colliding, delta_time: f32) {
 	tower_x, tower_y := physics.get_body_position(&game.physics, game.tower.id)
 
 	for &enemy in game.enemies {
-		//if !game.enemies[i].active {
-		//   continue
-		//}
+		if !enemy.active {
+			continue
+		}
+
+		if enemy.id in collisions.enemies_to_projectiles {
+			enemy.active = false
+			continue
+		}
 
 		// Move towards tower
 		physics.move_body_towards(&game.physics, enemy.id, game.tower.id, enemy.speed)
@@ -314,30 +325,26 @@ update_enemies :: proc(game: ^Game, delta_time: f32) {
 		//}
 	}
 
-	//// Remove inactive enemies
-	//i := 0
-	//for i < len(game.enemies) {
-	//   if !game.enemies[i].active {
-	//      // Remove enemy without preserving order
-	//      game.enemies[i] = game.enemies[len(game.enemies) - 1]
-	//      pop(&game.enemies)
-	//   } else {
-	//      i += 1
-	//   }
-	//}
+	// Remove inactive enemies
+	i := 0
+	for i < len(game.enemies) {
+		if !game.enemies[i].active {
+			unordered_remove(&game.enemies, i)
+		} else {
+			i += 1
+		}
+	}
 }
 
 // Update projectiles state
-update_projectiles :: proc(game: ^Game, delta_time: f32) {
-	collisions := physics.check_collisions(&game.physics)
-	defer delete(collisions)
+update_projectiles :: proc(game: ^Game, collisions: physics.Colliding, delta_time: f32) {
 	for &projectile, index in game.projectiles {
 
 		if !projectile.active {
 			continue
 		}
 
-		if projectile.id in collisions {
+		if projectile.id in collisions.projectiles_to_enemies {
 			projectile.active = false
 			continue
 		}
