@@ -2,3 +2,6 @@
 ? .lsp/
 /src.bin.dSYM/
 /src.bin
+/tower_defense_game.bin.dSYM/
+/tower_defense_game.bin
+.nrepl-port
