@@ -12,9 +12,11 @@ POSITION_ITERATIONS :: 2
 ScreenPosition :: [2]f32
 
 PhysicsWorld :: struct {
-	world:      b2.WorldId,
-	bodies:     map[string]b2.BodyId,
-	debug_draw: bool,
+	world:       b2.WorldId,
+	bodies:      map[string]b2.BodyId,
+	projectiles: map[b2.BodyId]string,
+	enemies:     map[b2.BodyId]string,
+	debug_draw:  bool,
 }
 
 // Initialize physics world
@@ -33,6 +35,8 @@ init_physics :: proc() -> PhysicsWorld {
 }
 
 destroy_physics :: proc(physics: ^PhysicsWorld) {
+	delete(physics.enemies)
+	delete(physics.projectiles)
 	for _, body in physics.bodies {
 		b2.DestroyBody(body)
 	}
@@ -57,7 +61,6 @@ toWorldPosition :: proc(position: ScreenPosition) -> b2.Vec2 {
 
 create_static_body :: proc(
 	physics: ^PhysicsWorld,
-	name: string,
 	extent: ScreenPosition,
 	width, height: f32,
 ) -> b2.BodyId {
@@ -72,14 +75,13 @@ create_static_body :: proc(
 	body_shape_def.material.friction = 0.3
 	body_shape_def.material.restitution = 0.1 // Slight bounce
 
+	body_shape_def.filter.categoryBits = u64(bit_set[BodyType]{.WALL})
+
 	box_shape := b2.CreatePolygonShape(
 		body,
 		body_shape_def,
 		b2.MakeBox(width / (2 * PHYSICS_SCALE), height / (2 * PHYSICS_SCALE)),
 	)
-
-	// Store body in map
-	physics.bodies[name] = body
 
 	return body
 }
@@ -111,16 +113,20 @@ create_static_circle :: proc(
 		b2.Circle{body_def.position, radius / PHYSICS_SCALE},
 	)
 
-	// Store body in map
-	physics.bodies[name] = body
-
 	return body
+}
+
+BodyType :: enum {
+	WALL,
+	ENEMY,
+	PROJECTILE,
 }
 
 // Create a dynamic body (for enemies)
 create_dynamic_body :: proc(
 	physics: ^PhysicsWorld,
-	name: string,
+	categoryBits: u64,
+	maskBits: u64,
 	position: ScreenPosition,
 	radius: f32,
 ) -> b2.BodyId {
@@ -137,8 +143,9 @@ create_dynamic_body :: proc(
 	body_shape_def.material.restitution = 0.2 // Slight bounce
 
 	// Add user data for collision filtering
-	body_shape_def.filter.categoryBits = 0x0002 // Enemy category
-	body_shape_def.filter.maskBits = 0x0001 | 0x0002 // Collide with walls and other enemies
+	body_shape_def.enableContactEvents = true
+	body_shape_def.filter.categoryBits = categoryBits
+	body_shape_def.filter.maskBits = maskBits
 
 	circle_shape := b2.CreateCircleShape(
 		body,
@@ -146,8 +153,42 @@ create_dynamic_body :: proc(
 		b2.Circle{body_def.position, radius / PHYSICS_SCALE},
 	)
 
-	physics.bodies[name] = body
+	return body
+}
 
+create_projectile :: proc(
+	physics: ^PhysicsWorld,
+	name: string,
+	position: ScreenPosition,
+	radius: f32,
+) -> b2.BodyId {
+	body := create_dynamic_body(
+		physics,
+		u64(bit_set[BodyType]{.PROJECTILE}),
+		u64(bit_set[BodyType]{.ENEMY}),
+		position,
+		radius,
+	)
+	physics.bodies[name] = body
+	physics.projectiles[body] = name
+	return body
+}
+
+create_enemy :: proc(
+	physics: ^PhysicsWorld,
+	name: string,
+	position: ScreenPosition,
+	radius: f32,
+) -> b2.BodyId {
+	body := create_dynamic_body(
+		physics,
+		u64(bit_set[BodyType]{.ENEMY}),
+		u64(bit_set[BodyType]{.PROJECTILE, .ENEMY, .WALL}),
+		position,
+		radius,
+	)
+	physics.bodies[name] = body
+	physics.enemies[body] = name
 	return body
 }
 
@@ -228,51 +269,31 @@ check_collision :: proc(physics: ^PhysicsWorld, body_name_a, body_name_b: string
 	if !exists_a {
 		return false
 	}
-
 	body_b, exists_b := physics.bodies[body_name_b]
 	if !exists_b {
 		return false
 	}
 
-	shapeIds: [2]b2.ShapeId
-	shapes_a := b2.Body_GetShapes(body_a, shapeIds[0:1])
-	shapes_b := b2.Body_GetShapes(body_b, shapeIds[1:])
-
+	// Get first shape of each body
+	tmp: [2]b2.ShapeId
+	shapes_a := b2.Body_GetShapes(body_a, tmp[0:1])
+	shapes_b := b2.Body_GetShapes(body_b, tmp[1:])
 	if shapes_a == nil || shapes_b == nil {
 		return false
 	}
 
 	shape_a := shapes_a[0]
 	shape_b := shapes_b[0]
-	//log.debugf("checking collision between %v and %v", shape_a, shape_b)
 
-	contact_events := b2.World_GetContactEvents(physics.world)
-	for begin_event in contact_events.beginEvents[:contact_events.beginCount] {
-		//log.debugf("checking collision between %v and %v", shape_a, shape_b)
-		log.debugf(
-			"collision detected between %v and %v",
-			begin_event.shapeIdA,
-			begin_event.shapeIdB,
-		)
-		if (shape_a == begin_event.shapeIdA || shape_a == begin_event.shapeIdB) &&
-		   (shape_b == begin_event.shapeIdA || shape_b == begin_event.shapeIdB) {
-			log.debugf("collision detected")
-			return true
-		}
-	}
+	// Overlap test using current transforms
+	xf_a := b2.Body_GetTransform(body_a)
+	xf_b := b2.Body_GetTransform(body_b)
 
-	//// Check collision
-	//// Note: This is a simplified approach. For more accurate collision detection,
-	//// you would typically use b2's contact listener system.
-	//shape_a := b2.get_shape(fixture_a)
-	//shape_b := b2.get_shape(fixture_b)
-
-	//transform_a := b2.get_transform(body_a)
-	//transform_b := b2.get_transform(body_b)
-
-	//return b2.test_overlap(shape_a, 0, shape_b, 0, transform_a, transform_b)
+	// If your binding exposes Shape_TestOverlap instead, swap the call accordingly.
+	//return b2.Shape_TestOverlap(shape_a, 0, shape_b, 0, xf_a, xf_b)
 	return false
 }
+
 
 // Calculate distance between two bodies
 calculate_distance :: proc(physics: ^PhysicsWorld, body_name_a, body_name_b: string) -> f32 {
@@ -304,36 +325,29 @@ WALLS: [Location]string = {
 create_boundaries :: proc(physics: ^PhysicsWorld, width, height: f32) {
 	wall_thickness :: 10
 
-	create_static_body(
+	physics.bodies[WALLS[.TOP]] = create_static_body(
 		physics,
-		WALLS[.TOP],
 		{width / 2, wall_thickness / 2},
 		width,
 		wall_thickness,
 	)
 
-	// Bottom wall
-	create_static_body(
+	physics.bodies[WALLS[.BOTTOM]] = create_static_body(
 		physics,
-		WALLS[.BOTTOM],
 		{width / 2, height - (wall_thickness / 2)},
 		width,
 		wall_thickness,
 	)
 
-	// Left wall
-	create_static_body(
+	physics.bodies[WALLS[.LEFT]] = create_static_body(
 		physics,
-		WALLS[.LEFT],
 		{wall_thickness / 2, height / 2},
 		wall_thickness,
 		height,
 	)
 
-	// Right wall
-	create_static_body(
+	physics.bodies[WALLS[.RIGHT]] = create_static_body(
 		physics,
-		WALLS[.RIGHT],
 		{width - (wall_thickness / 2), height / 2},
 		wall_thickness,
 		height,
@@ -341,7 +355,7 @@ create_boundaries :: proc(physics: ^PhysicsWorld, width, height: f32) {
 }
 
 create_tower :: proc(physics: ^PhysicsWorld, name: string, center: ScreenPosition, radius: f32) {
-	create_static_circle(physics, name, center, 20)
+	physics.bodies[name] = create_static_circle(physics, name, center, 20)
 }
 
 // Remove a body from the physics world
@@ -364,4 +378,30 @@ distance :: proc(world: ^PhysicsWorld, from, to: string) -> f32 {
 	dx := to_x - from_x
 	dy := to_y - from_y
 	return math.sqrt(dx * dx + dy * dy)
+}
+
+Colliding :: map[string]struct{}
+
+check_collisions :: proc(physics: ^PhysicsWorld) -> Colliding {
+	colliding : Colliding
+	events := b2.World_GetContactEvents(physics.world)
+	if events.beginCount > 0 {
+		for event_idx in 0 ..< events.beginCount {
+			event := events.beginEvents[event_idx]
+			bodyA := b2.Shape_GetBody(event.shapeIdA)
+			bodyB := b2.Shape_GetBody(event.shapeIdB)
+			if (bodyA in physics.projectiles && bodyB in physics.enemies) ||
+			   (bodyA in physics.enemies && bodyB in physics.projectiles) {
+				if name, ok := physics.projectiles[bodyA]; ok {
+					log.debugf("collision detected with projectile %v", name)
+					colliding[name] = {}
+				}
+				if name, ok := physics.projectiles[bodyB]; ok {
+					log.debugf("collision detected with projectile %v", name)
+					colliding[name] = {}
+				}
+			}
+		}
+	}
+	return colliding
 }

@@ -171,8 +171,7 @@ create_enemy :: proc(game: ^Game, x, y: f32, type: EnemyType) -> Enemy {
 		enemy.speed = 50
 		enemy.damage = 5
 		enemy.value = 10
-
-		physics.create_dynamic_body(&game.physics, enemy.id, {x, y}, 10)
+		physics.create_enemy(&game.physics, enemy.id, {x, y}, 10)
 
 	case .FAST:
 		enemy.health = 15
@@ -180,8 +179,7 @@ create_enemy :: proc(game: ^Game, x, y: f32, type: EnemyType) -> Enemy {
 		enemy.speed = 80
 		enemy.damage = 3
 		enemy.value = 15
-
-		physics.create_dynamic_body(&game.physics, enemy.id, {x, y}, 8)
+		physics.create_enemy(&game.physics, enemy.id, {x, y}, 8)
 
 	case .TANK:
 		enemy.health = 60
@@ -189,8 +187,7 @@ create_enemy :: proc(game: ^Game, x, y: f32, type: EnemyType) -> Enemy {
 		enemy.speed = 30
 		enemy.damage = 10
 		enemy.value = 20
-
-		physics.create_dynamic_body(&game.physics, enemy.id, {x, y}, 15)
+		physics.create_enemy(&game.physics, enemy.id, {x, y}, 15)
 	}
 
 	enemy.active = true
@@ -213,7 +210,7 @@ create_projectile :: proc(game: ^Game, source, target: string, damage: int) -> P
 	projectile.active = true
 
 	source_x, source_y := physics.get_body_position(&game.physics, source)
-	physics.create_dynamic_body(&game.physics, projectile.id, {source_x, source_y}, 5)
+	physics.create_projectile(&game.physics, projectile.id, {source_x, source_y}, 5)
 
 	return projectile
 }
@@ -332,9 +329,16 @@ update_enemies :: proc(game: ^Game, delta_time: f32) {
 
 // Update projectiles state
 update_projectiles :: proc(game: ^Game, delta_time: f32) {
+	collisions := physics.check_collisions(&game.physics)
+	defer delete(collisions)
 	for &projectile, index in game.projectiles {
 
 		if !projectile.active {
+			continue
+		}
+
+		if projectile.id in collisions {
+			projectile.active = false
 			continue
 		}
 
@@ -342,7 +346,6 @@ update_projectiles :: proc(game: ^Game, delta_time: f32) {
 		if target_index < 0 {
 			// Target no longer exists, deactivate projectile
 			projectile.active = false
-			physics.remove_body(&game.physics, projectile.id)
 			continue
 		}
 
@@ -352,34 +355,17 @@ update_projectiles :: proc(game: ^Game, delta_time: f32) {
 			projectile.target,
 			projectile.speed,
 		)
-
-		// Check collision with target
-		if physics.check_collision(&game.physics, projectile.id, projectile.target) {
-			//// Damage enemy
-			//game.enemies[target_index].health -= projectile.damage
-
-			//// Check if enemy is defeated
-			//if game.enemies[target_index].health <= 0 {
-			//   // Add score
-			//   game.score += game.enemies[target_index].value
-
-			//   // Deactivate enemy
-			//   game.enemies[target_index].active = false
-			//   physics.remove_body(&game.physics, game.enemies[target_index].id)
-			//}
-			// Deactivate projectile
-			projectile.active = false
-			physics.remove_body(&game.physics, projectile.id)
-		}
 	}
 
 	// Remove inactive projectiles
 	i := 0
 	for i < len(game.projectiles) {
-		if !game.projectiles[i].active {
-			// Remove projectile without preserving order
-			game.projectiles[i] = game.projectiles[len(game.projectiles) - 1]
-			pop(&game.projectiles)
+		if projectile := game.projectiles[i]; !projectile.active {
+			//// Remove projectile without preserving order
+			//game.projectiles[i] = game.projectiles[len(game.projectiles) - 1]
+			//pop(&game.projectiles)
+			physics.remove_body(&game.physics, projectile.id)
+			unordered_remove(&game.projectiles, i)
 		} else {
 			i += 1
 		}
