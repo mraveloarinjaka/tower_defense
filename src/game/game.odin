@@ -1,7 +1,6 @@
 package game
 
 import "../physics"
-import "core:c"
 import "core:fmt"
 import "core:math"
 import "core:math/rand"
