@@ -15,6 +15,20 @@ SCREEN_HEIGHT :: 768
 TITLE :: "Tower Defense Game"
 TARGET_FPS :: 60
 
+// Tower defaults
+DEFAULT_TOWER_HEALTH :: 100
+DEFAULT_TOWER_DAMAGE :: 10
+DEFAULT_TOWER_RANGE :: 150.0
+DEFAULT_TOWER_COOLDOWN :: 1.0
+
+// Tower tuning limits, used to keep interactive edits playable
+MIN_TOWER_DAMAGE :: 1
+MAX_TOWER_DAMAGE :: 1000
+MIN_TOWER_RANGE :: 20.0
+MAX_TOWER_RANGE :: 600.0
+MIN_TOWER_COOLDOWN :: 0.05
+MAX_TOWER_COOLDOWN :: 3.0
+
 GameState :: enum {
 	MENU,
 	PLAYING,
@@ -137,11 +151,11 @@ create_tower :: proc(game: ^Game, x, y: f32) -> Tower {
 	tower: Tower
 	tower.id = "tower"
 	tower.type = .BASIC
-	tower.health = 100
-	tower.max_health = 100
-	tower.damage = 10
-	tower.range = 150
-	tower.cooldown = 1.0
+	tower.health = DEFAULT_TOWER_HEALTH
+	tower.max_health = DEFAULT_TOWER_HEALTH
+	tower.damage = DEFAULT_TOWER_DAMAGE
+	tower.range = DEFAULT_TOWER_RANGE
+	tower.cooldown = DEFAULT_TOWER_COOLDOWN
 	tower.cooldown_timer = 0
 
 	// Create physics body for tower
@@ -151,6 +165,25 @@ create_tower :: proc(game: ^Game, x, y: f32) -> Tower {
 	//physics.create_sensor(&game.physics, "tower_range", x, y, tower.range)
 
 	return tower
+}
+
+// Keep tower tuning values within playable limits.
+// A cooldown of 0 would spawn a projectile (and its physics body) every frame.
+clamp_tower_tuning :: proc(tower: ^Tower) {
+	tower.damage = clamp(tower.damage, MIN_TOWER_DAMAGE, MAX_TOWER_DAMAGE)
+	tower.range = clamp(tower.range, MIN_TOWER_RANGE, MAX_TOWER_RANGE)
+	tower.cooldown = clamp(tower.cooldown, MIN_TOWER_COOLDOWN, MAX_TOWER_COOLDOWN)
+
+	// Do not make the tower wait longer than the new cooldown.
+	tower.cooldown_timer = clamp(tower.cooldown_timer, 0, tower.cooldown)
+}
+
+// Restore the default tuning values (health is intentionally left untouched).
+reset_tower_tuning :: proc(tower: ^Tower) {
+	tower.damage = DEFAULT_TOWER_DAMAGE
+	tower.range = DEFAULT_TOWER_RANGE
+	tower.cooldown = DEFAULT_TOWER_COOLDOWN
+	tower.cooldown_timer = 0
 }
 
 // Create an enemy
@@ -497,10 +530,6 @@ handle_input :: proc(game: ^Game) -> (result: InputResult = .CONTINUE) {
 		if rl.IsKeyPressed(.ESCAPE) {
 			game.state = .GAME_OVER
 		}
-		// Toggle debug mode with F1
-		//if rl.IsKeyPressed(.F1) {
-		//   renderer.toggle_debug_mode(&game.renderer)
-		//}
 	} else if game.state == .GAME_OVER {
 		if rl.IsKeyPressed(.ENTER) {
 			// Clean up old game

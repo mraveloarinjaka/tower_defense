@@ -84,9 +84,40 @@ draw_debug_info :: proc(renderer: ^Renderer, last_text_line: i32) {
 	for entity, index in entities {
 		text := fmt.tprintf("%s: %d", entity.label, entity.value)
 		y := last_text_line + i32(index) * LINE_SPACING
-		rl.DrawText(strings.clone_to_cstring(text), 10, y, 20, rl.DARKGRAY)
+		rl.DrawText(
+			strings.clone_to_cstring(text, context.temp_allocator),
+			10,
+			y,
+			20,
+			rl.DARKGRAY,
+		)
+	}
+
+	// Draw the current tower tuning values
+	tower := renderer.world.tower
+	shots_per_second := f32(0)
+	if tower.cooldown > 0 {
+		shots_per_second = 1.0 / tower.cooldown
+	}
+
+	tuning := [4]string {
+		fmt.tprintf("Damage: %d", tower.damage),
+		fmt.tprintf("Range: %.0f", tower.range),
+		fmt.tprintf("Cooldown: %.2f s (%.1f shots/s)", tower.cooldown, shots_per_second),
+		"F2: tower tuning",
+	}
+
+	next_line := last_text_line + i32(len(entities)) * LINE_SPACING
+	for text, index in tuning {
+		rl.DrawText(
+			strings.clone_to_cstring(text, context.temp_allocator),
+			10,
+			next_line + i32(index) * LINE_SPACING,
+			20,
+			rl.DARKGRAY,
+		)
 	}
 
 	// Draw FPS
-	rl.DrawFPS(10, last_text_line + i32(len(entities)) * LINE_SPACING)
+	rl.DrawFPS(10, next_line + i32(len(tuning)) * LINE_SPACING)
 }

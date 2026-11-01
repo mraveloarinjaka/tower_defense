@@ -21,9 +21,10 @@ PHYSICS_SCALE :: physics.PHYSICS_SCALE
 
 // Renderer context
 Renderer :: struct {
-	world:      ^game.Game,
-	debug_mode: bool,
-	camera:     rl.Camera2D,
+	world:         ^game.Game,
+	debug_mode:    bool,
+	panel_visible: bool,
+	camera:        rl.Camera2D,
 }
 
 // Initialize renderer
@@ -31,6 +32,10 @@ init_renderer :: proc(world: ^game.Game) -> Renderer {
 	renderer: Renderer
 	renderer.world = world
 	renderer.debug_mode = true
+	renderer.panel_visible = false
+
+	// Keep the tower tuning panel readable with the default font
+	rl.GuiSetStyle(.DEFAULT, c.int(rl.GuiDefaultProperty.TEXT_SIZE), 18)
 
 	renderer.camera = rl.Camera2D{}
 	renderer.camera.zoom = 1.0
@@ -81,6 +86,7 @@ draw_game :: proc(renderer: ^Renderer) {
 		}
 
 		draw_hud(renderer)
+		draw_tower_panel(renderer)
 	} else if renderer.world.state == .GAME_OVER {
 		draw_game_over(renderer.world.score)
 	}
@@ -253,4 +259,9 @@ set_camera_zoom :: proc(renderer: ^Renderer, zoom: f32) {
 // Toggle debug mode
 toggle_debug_mode :: proc(renderer: ^Renderer) {
 	renderer.debug_mode = !renderer.debug_mode
+}
+
+// Toggle the tower tuning panel
+toggle_tower_panel :: proc(renderer: ^Renderer) {
+	renderer.panel_visible = !renderer.panel_visible
 }

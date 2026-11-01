@@ -34,13 +34,17 @@ main :: proc() {
 			break game_loop
 		}
 
-		// Calculate delta time
+		if rl.IsKeyPressed(.F1) {
+			renderer.toggle_debug_mode(&game_renderer)
+		}
+		if rl.IsKeyPressed(.F2) {
+			renderer.toggle_tower_panel(&game_renderer)
+		}
+
 		delta_time := rl.GetFrameTime()
 
-		// Update game
 		game.update_game(&game_state, delta_time)
 
-		// Draw game
 		renderer.draw_game(&game_renderer)
 
 		free_all(context.temp_allocator)
