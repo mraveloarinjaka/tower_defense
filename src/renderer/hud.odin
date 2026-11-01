@@ -6,6 +6,9 @@ import "core:fmt"
 import "core:strings"
 import rl "vendor:raylib"
 
+// Vertical spacing between debug text lines
+LINE_SPACING :: 30
+
 // Draw the UI
 draw_hud :: proc(renderer: ^Renderer) {
 	// Draw score
@@ -69,10 +72,21 @@ draw_debug_info :: proc(renderer: ^Renderer, last_text_line: i32) {
 		return
 	}
 
-	// Draw physics world information
-	debug_text := fmt.tprintf("Bodies: %d", len(renderer.world.physics.bodies))
-	rl.DrawText(strings.clone_to_cstring(debug_text), 10, last_text_line, 20, rl.DARKGRAY)
+	// Draw entity counts
+	entities := [2]struct {
+		label: string,
+		value: int,
+	}{
+		{"Enemies", len(renderer.world.enemies)},
+		{"Projectiles", len(renderer.world.projectiles)},
+	}
+
+	for entity, index in entities {
+		text := fmt.tprintf("%s: %d", entity.label, entity.value)
+		y := last_text_line + i32(index) * LINE_SPACING
+		rl.DrawText(strings.clone_to_cstring(text), 10, y, 20, rl.DARKGRAY)
+	}
 
 	// Draw FPS
-	rl.DrawFPS(10, last_text_line + 30)
+	rl.DrawFPS(10, last_text_line + i32(len(entities)) * LINE_SPACING)
 }
