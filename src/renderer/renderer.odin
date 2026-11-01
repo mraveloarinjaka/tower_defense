@@ -74,7 +74,7 @@ draw_game :: proc(renderer: ^Renderer) {
 				draw_enemy(renderer, enemy.id, {}, enemy.health, enemy.max_health)
 			}
 		}
-		for projectile in  renderer.world.projectiles {
+		for projectile in renderer.world.projectiles {
 			if projectile.active {
 				draw_projectile(renderer, projectile.id)
 			}

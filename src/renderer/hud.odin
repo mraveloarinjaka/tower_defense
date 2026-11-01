@@ -76,4 +76,3 @@ draw_debug_info :: proc(renderer: ^Renderer, last_text_line: i32) {
 	// Draw FPS
 	rl.DrawFPS(10, last_text_line + 30)
 }
-

@@ -234,6 +234,7 @@ update_game :: proc(game: ^Game, delta_time: f32) {
 		defer {
 			delete(collisions.enemies_to_projectiles)
 			delete(collisions.projectiles_to_enemies)
+			delete(collisions.projectiles_to_walls)
 		}
 
 		// Update enemies
@@ -344,6 +345,11 @@ update_projectiles :: proc(game: ^Game, collisions: physics.Colliding, delta_tim
 		}
 
 		if projectile.id in collisions.projectiles_to_enemies {
+			projectile.active = false
+			continue
+		}
+
+		if projectile.id in collisions.projectiles_to_walls {
 			projectile.active = false
 			continue
 		}

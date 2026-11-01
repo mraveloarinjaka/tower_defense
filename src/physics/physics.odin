@@ -342,34 +342,96 @@ distance :: proc(world: ^PhysicsWorld, from, to: string) -> f32 {
 Colliding :: struct {
 	projectiles_to_enemies: map[string]string,
 	enemies_to_projectiles: map[string]string,
+	projectiles_to_walls:   map[string]string,
 }
 
 check_collisions :: proc(physics: ^PhysicsWorld) -> Colliding {
 	colliding: Colliding
 	events := b2.World_GetContactEvents(physics.world)
 	if events.beginCount > 0 {
-		for event_idx in 0 ..< events.beginCount {
+		events_check: for event_idx in 0 ..< events.beginCount {
 			event := events.beginEvents[event_idx]
 			bodyA := b2.Shape_GetBody(event.shapeIdA)
 			bodyB := b2.Shape_GetBody(event.shapeIdB)
-			if (bodyA in physics.projectiles && bodyB in physics.enemies) ||
-			   (bodyA in physics.enemies && bodyB in physics.projectiles) {
-				enemy: string
-				projectile: string
-
-				if bodyA in physics.projectiles {
-					enemy = physics.enemies[bodyB]
-					projectile = physics.projectiles[bodyA]
-				}
-				if bodyA in physics.enemies {
-					enemy = physics.enemies[bodyA]
-					projectile = physics.projectiles[bodyB]
-				}
-				log.debugf("enemy %v hit by projectile %v", enemy, projectile)
-				colliding.projectiles_to_enemies[projectile] = enemy
-				colliding.enemies_to_projectiles[enemy] = projectile
-			}
+			check_projectile_x_enemy_collisions(
+				physics,
+				&colliding,
+				bodyA,
+				bodyB,
+			) or_continue events_check
+			check_projectile_x_wall_collisions(
+				physics,
+				&colliding,
+				bodyA,
+				bodyB,
+			) or_continue events_check
 		}
 	}
 	return colliding
+}
+
+// Record a collision when one body is a projectile and the other an enemy.
+// Returns true when a collision was recorded, false for non-matching body pairs.
+check_projectile_x_enemy_collisions :: proc(
+	physics: ^PhysicsWorld,
+	colliding: ^Colliding,
+	bodyA, bodyB: b2.BodyId,
+) -> bool {
+	enemy: string
+	projectile: string
+
+	no_collision := true
+
+	if bodyA in physics.projectiles && bodyB in physics.enemies {
+		no_collision = false
+		enemy = physics.enemies[bodyB]
+		projectile = physics.projectiles[bodyA]
+	} else if bodyA in physics.enemies && bodyB in physics.projectiles {
+		no_collision = false
+		enemy = physics.enemies[bodyA]
+		projectile = physics.projectiles[bodyB]
+	}
+	if no_collision {
+		return true
+	}
+	log.debugf("enemy %v hit by projectile %v", enemy, projectile)
+	colliding.projectiles_to_enemies[projectile] = enemy
+	colliding.enemies_to_projectiles[enemy] = projectile
+
+	return false
+}
+
+// Record a collision when one body is a projectile and the other a boundary wall.
+// Returns true when a collision was recorded, false for non-matching body pairs.
+check_projectile_x_wall_collisions :: proc(
+	physics: ^PhysicsWorld,
+	colliding: ^Colliding,
+	bodyA, bodyB: b2.BodyId,
+) -> bool {
+	projectile: string
+	wall: string
+
+	if projectile, projectile_exists := physics.projectiles[bodyA]; projectile_exists {
+		wall = is_wall(physics, bodyB) or_else ""
+	} else if projectile, projectile_exists := physics.projectiles[bodyB]; projectile_exists {
+		wall = is_wall(physics, bodyA) or_else ""
+	}
+
+	if wall == "" {
+		return true
+	}
+
+	log.debugf("projectile %v hit wall %v", projectile, wall)
+	colliding.projectiles_to_walls[projectile] = wall
+	return false
+}
+
+is_wall :: proc(physics: ^PhysicsWorld, body: b2.BodyId) -> (string, bool) {
+	for name in WALLS {
+		body_id, exists := physics.bodies[name]
+		if exists && body_id == body {
+			return name, true
+		}
+	}
+	return "", false
 }
