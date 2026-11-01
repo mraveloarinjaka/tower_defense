@@ -156,7 +156,7 @@ create_projectile :: proc(
 	body := create_dynamic_body(
 		physics,
 		u64(bit_set[BodyType]{.PROJECTILE}),
-		u64(bit_set[BodyType]{.ENEMY}),
+		u64(bit_set[BodyType]{.ENEMY, .WALL}),
 		position,
 		radius,
 	)

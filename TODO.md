@@ -2,7 +2,7 @@
 
 [ ] modify tower data interactively (e.g. cooldown time)
 
-[ ] projectiles should disappear into the wall
+[x] projectiles should disappear into the wall
 
 [ ] make enemies crash into the tower
 
