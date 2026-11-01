@@ -1,6 +1,6 @@
 [ ] detect collisions
 
-[ ] modify tower data interactively (e.g. cooldown time)
+[x] modify tower data interactively (e.g. cooldown time)
 
 [x] projectiles should disappear into the wall
 
