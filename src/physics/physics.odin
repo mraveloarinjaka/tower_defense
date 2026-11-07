@@ -78,7 +78,7 @@ create_static_body :: proc(
 	body_shape_def.filter.categoryBits = u64(bit_set[BodyType]{.WALL})
 
 	box := b2.MakeBox(width / (2 * PHYSICS_SCALE), height / (2 * PHYSICS_SCALE))
-	box_shape := b2.CreatePolygonShape(body, body_shape_def, &box)
+	box_shape := b2.CreatePolygonShape(body, body_shape_def, box)
 
 	return body
 }
@@ -105,7 +105,7 @@ create_static_circle :: proc(
 
 	// Create circle shape
 	circle := b2.Circle{body_def.position, radius / PHYSICS_SCALE}
-	circle_shape := b2.CreateCircleShape(body, body_shape_def, &circle)
+	circle_shape := b2.CreateCircleShape(body, body_shape_def, circle)
 
 	return body
 }
@@ -142,7 +142,7 @@ create_dynamic_body :: proc(
 	body_shape_def.filter.maskBits = maskBits
 
 	circle := b2.Circle{body_def.position, radius / PHYSICS_SCALE}
-	circle_shape := b2.CreateCircleShape(body, body_shape_def, &circle)
+	circle_shape := b2.CreateCircleShape(body, body_shape_def, circle)
 
 	return body
 }
