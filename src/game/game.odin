@@ -442,17 +442,8 @@ spawn_enemy :: proc(game: ^Game) {
 		y = f32(rand.int_max(SCREEN_HEIGHT))
 	}
 
-	// Determine enemy type based on wave and randomness
-	enemy_type: EnemyType
-	roll := rand.int_max(100)
-
-	if game.wave >= 5 && roll < 20 {
-		enemy_type = .TANK
-	} else if game.wave >= 3 && roll < 40 {
-		enemy_type = .FAST
-	} else {
-		enemy_type = .BASIC
-	}
+	// Pick a random enemy type from all available types
+	enemy_type := EnemyType(rand.int_max(len(EnemyType)))
 
 	// Create and add enemy
 	enemy := create_enemy(game, x, y, enemy_type)
