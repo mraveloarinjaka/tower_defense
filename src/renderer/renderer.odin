@@ -17,6 +17,14 @@ DEBUG_COLOR_JOINT :: rl.PURPLE
 DEBUG_COLOR_AABB :: rl.SKYBLUE
 DEBUG_COLOR_SHAPE :: rl.DARKBLUE
 
+// Enemy colors, indexed by enemy type
+ENEMY_COLORS := [game.EnemyType]rl.Color {
+	.BASIC = rl.ORANGE,
+	.FAST  = {255, 220, 0, 255}, // yellow
+	.TANK  = {160, 60, 200, 255}, // purple
+}
+PROJECTILE_COLOR :: rl.Color{57, 255, 20, 255} // bright neon green
+
 PHYSICS_SCALE :: physics.PHYSICS_SCALE
 
 // Renderer context
@@ -76,7 +84,7 @@ draw_game :: proc(renderer: ^Renderer) {
 		draw_tower(renderer, renderer.world.tower.id, {}, renderer.world.tower.range)
 		for enemy in renderer.world.enemies {
 			if enemy.active {
-				draw_enemy(renderer, enemy.id, {}, enemy.health, enemy.max_health)
+				draw_enemy(renderer, enemy.id, enemy.type, {}, enemy.health, enemy.max_health)
 			}
 		}
 		for projectile in renderer.world.projectiles {
@@ -121,6 +129,7 @@ draw_tower :: proc(
 draw_enemy :: proc(
 	renderer: ^Renderer,
 	body_name: string,
+	enemy_type: game.EnemyType,
 	texture: rl.Texture2D = {},
 	health: int = 0,
 	max_health: int = 0,
@@ -129,8 +138,8 @@ draw_enemy :: proc(
 		return
 	}
 
-	// Draw the enemy body
-	draw_body(renderer, body_name, rl.RED, texture)
+	// Draw the enemy body, colored by enemy type
+	draw_body(renderer, body_name, ENEMY_COLORS[enemy_type], texture)
 
 	// Draw health bar if health is provided
 	//if max_health > 0 {
@@ -202,7 +211,7 @@ draw_projectile :: proc(renderer: ^Renderer, body_name: string, texture: rl.Text
 	}
 
 	// Draw the projectile body
-	draw_body(renderer, body_name, rl.YELLOW, texture)
+	draw_body(renderer, body_name, PROJECTILE_COLOR, texture)
 }
 
 // Draw game boundaries
