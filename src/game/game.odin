@@ -45,16 +45,24 @@ TowerType :: enum {
 	BASIC,
 }
 
+TOWER_RADIUS :: 20.0 // Collision radius of the tower body (px)
+ORBIT_GAP_MIN :: 6.0 // Min extra clearance between enemy edge and tower edge while orbiting (px)
+ORBIT_ENGAGE_RANGE :: 40.0 // Enemies switch to orbiting once within this distance of the ring (px)
+
 // Enemy structure
 Enemy :: struct {
-	id:         string,
-	type:       EnemyType,
-	health:     int,
-	max_health: int,
-	speed:      f32,
-	damage:     int,
-	active:     bool,
-	value:      int, // Score value when defeated
+	id:              string,
+	type:            EnemyType,
+	health:          int,
+	max_health:      int,
+	speed:           f32,
+	damage:          int,
+	active:          bool,
+	value:           int, // Score value when defeated
+	radius:          f32, // Collision radius (px)
+	orbit_direction: f32, // +1 or -1, chosen at spawn
+	orbit_mix:       f32, // 0..1, where the orbit ring sits between min clearance and tower range
+	orbiting:        bool, // True once the enemy has reached the orbit ring
 }
 
 // Tower structure
@@ -157,9 +165,10 @@ create_tower :: proc(game: ^Game, x, y: f32) -> Tower {
 	tower.range = DEFAULT_TOWER_RANGE
 	tower.cooldown = DEFAULT_TOWER_COOLDOWN
 	tower.cooldown_timer = 0
+	tower.radius = TOWER_RADIUS
 
 	// Create physics body for tower
-	physics.create_tower(&game.physics, tower.id, {x, y}, 20)
+	physics.create_tower(&game.physics, tower.id, {x, y}, tower.radius)
 
 	//// Create range sensor
 	//physics.create_sensor(&game.physics, "tower_range", x, y, tower.range)
@@ -196,6 +205,7 @@ create_enemy :: proc(game: ^Game, x, y: f32, type: EnemyType) -> Enemy {
 	enemy.id = strings.clone(fmt.tprintf("enemy_%d", game.enemy_count))
 
 	// Set properties based on type
+	physics_radius: f32
 	switch type {
 	case .BASIC:
 		enemy.health = 30
@@ -203,7 +213,7 @@ create_enemy :: proc(game: ^Game, x, y: f32, type: EnemyType) -> Enemy {
 		enemy.speed = 50
 		enemy.damage = 5
 		enemy.value = 10
-		physics.create_enemy(&game.physics, enemy.id, {x, y}, 10)
+		physics_radius = 10
 
 	case .FAST:
 		enemy.health = 15
@@ -211,7 +221,7 @@ create_enemy :: proc(game: ^Game, x, y: f32, type: EnemyType) -> Enemy {
 		enemy.speed = 80
 		enemy.damage = 3
 		enemy.value = 15
-		physics.create_enemy(&game.physics, enemy.id, {x, y}, 8)
+		physics_radius = 8
 
 	case .TANK:
 		enemy.health = 60
@@ -219,10 +229,18 @@ create_enemy :: proc(game: ^Game, x, y: f32, type: EnemyType) -> Enemy {
 		enemy.speed = 30
 		enemy.damage = 10
 		enemy.value = 20
-		physics.create_enemy(&game.physics, enemy.id, {x, y}, 15)
+		physics_radius = 15
 	}
+	physics.create_enemy(&game.physics, enemy.id, {x, y}, physics_radius)
 
 	enemy.active = true
+	enemy.radius = physics_radius
+	enemy.orbit_direction = 1
+	if rand.int_max(2) == 0 {
+		enemy.orbit_direction = -1
+	}
+	enemy.orbit_mix = rand.float32()
+	enemy.orbiting = false
 
 	return enemy
 }
@@ -329,8 +347,6 @@ update_tower :: proc(game: ^Game, delta_time: f32) {
 
 // Update enemies state
 update_enemies :: proc(game: ^Game, collisions: physics.Colliding, delta_time: f32) {
-	tower_x, tower_y := physics.get_body_position(&game.physics, game.tower.id)
-
 	for &enemy in game.enemies {
 		if !enemy.active {
 			continue
@@ -341,8 +357,30 @@ update_enemies :: proc(game: ^Game, collisions: physics.Colliding, delta_time: f
 			continue
 		}
 
-		// Move towards tower
-		physics.move_body_towards(&game.physics, enemy.id, game.tower.id, enemy.speed)
+		// Approach until within engage distance of the orbit ring, then orbit forever
+		// Ring radius is random between touching-plus-gap and the tower's range
+		orbit_min_px := game.tower.radius + enemy.radius + ORBIT_GAP_MIN
+		orbit_max_px := max(orbit_min_px, game.tower.range)
+		orbit_radius_px := orbit_min_px + enemy.orbit_mix * (orbit_max_px - orbit_min_px)
+		if !enemy.orbiting {
+			dist_px := physics.distance(&game.physics, enemy.id, game.tower.id)
+			if dist_px <= orbit_radius_px + ORBIT_ENGAGE_RANGE {
+				enemy.orbiting = true
+			}
+		}
+
+		if enemy.orbiting {
+			physics.orbit_body_around(
+				&game.physics,
+				enemy.id,
+				game.tower.id,
+				orbit_radius_px / physics.PHYSICS_SCALE,
+				enemy.speed / physics.PHYSICS_SCALE,
+				enemy.orbit_direction,
+			)
+		} else {
+			physics.move_body_towards(&game.physics, enemy.id, game.tower.id, enemy.speed)
+		}
 
 		//// Check collision with tower
 		//if physics.check_collision(&game.physics, game.enemies[i].id, game.tower.id) {
