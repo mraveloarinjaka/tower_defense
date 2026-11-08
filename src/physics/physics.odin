@@ -243,6 +243,52 @@ move_body_towards :: proc(
 	b2.Body_ApplyForceToCenter(body, force, true)
 }
 
+// Drive a body around target_name on a ring of orbit_radius_m (meters).
+// Radial term closes the gap to the ring; tangential term makes it circle.
+// direction: +1 for counter-clockwise, -1 for clockwise.
+orbit_body_around :: proc(
+	physics: ^PhysicsWorld,
+	body_name: string,
+	target_name: string,
+	orbit_radius_m: f32,
+	speed_mps: f32,
+	direction: f32,
+) {
+	body, body_exists := physics.bodies[body_name]
+	target, target_exists := physics.bodies[target_name]
+
+	if !(body_exists && target_exists) {
+		return
+	}
+
+	pos := b2.Body_GetPosition(body)
+	center := b2.Body_GetPosition(target)
+	r := b2.Vec2{pos.x - center.x, pos.y - center.y}
+	d := math.sqrt(r.x * r.x + r.y * r.y)
+
+	// Enemy sits on the tower center; no defined orbit direction yet.
+	if d < 0.0001 {
+		return
+	}
+
+	radial := b2.Vec2{r.x / d, r.y / d}
+	tangent := b2.Vec2{-radial.y * direction, radial.x * direction}
+
+	// Positive radial_error means the body is too close and must move outward.
+	// The radial term is NOT clamped together with the tangential speed, so a
+	// body that drifts inside the ring is always pushed back out.
+	RADIAL_GAIN :: 10.0 // 1/s: how fast the body closes the gap to the ring
+	radial_error := orbit_radius_m - d
+	v_radial := clamp(radial_error * RADIAL_GAIN, -2 * speed_mps, 2 * speed_mps)
+
+	v := b2.Vec2 {
+		tangent.x * speed_mps + radial.x * v_radial,
+		tangent.y * speed_mps + radial.y * v_radial,
+	}
+
+	b2.Body_SetLinearVelocity(body, v)
+}
+
 // Get position of a body
 get_body_position :: proc(physics: ^PhysicsWorld, body_name: string) -> (x, y: f32) {
 	body, exists := physics.bodies[body_name]
