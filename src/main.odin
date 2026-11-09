@@ -2,6 +2,7 @@ package main
 
 import "core:log"
 import "core:math/rand"
+import "core:os"
 import "core:time"
 import "game"
 import "renderer"
@@ -26,6 +27,15 @@ main :: proc() {
 	game_state := game.init_game()
 	defer game.destroy_game(&game_state)
 	game_renderer := renderer.init_renderer(&game_state)
+
+	// Debug flag: `--skip-menu` starts directly in gameplay, bypassing the
+	// "PRESS ENTER TO START" screen. Test-only; default startup is unchanged.
+	// Usage: ./tower_defense_game --skip-menu
+	for arg in os.args[1:] {
+		if arg == "--skip-menu" {
+			game_state.state = .PLAYING
+		}
+	}
 
 	// Main game loop
 	game_loop: for !rl.WindowShouldClose() {
