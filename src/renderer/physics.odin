@@ -20,10 +20,11 @@ draw_body :: proc(
 	body, exists := renderer.world.physics.bodies[body_name]
 	if !exists {return}
 
-	// Get body position
+	// Get body position (meters) and convert to render pixels
 	position := b2.Body_GetPosition(body)
-	body_x := position.x * PHYSICS_SCALE
-	body_y := position.y * PHYSICS_SCALE
+	body_render := world_to_render(position.x, position.y)
+	body_x := body_render.x
+	body_y := body_render.y
 
 	// Get body angle
 	rotation := b2.Body_GetRotation(body)
@@ -46,7 +47,7 @@ draw_body :: proc(
 	#partial switch shape_type {
 	case .circleShape:
 		circle_shape := b2.Shape_GetCircle(shape[0])
-		radius := circle_shape.radius * PHYSICS_SCALE
+		radius := meters_to_render(circle_shape.radius)
 
 		if texture.id != 0 {
 			// Draw textured circle
@@ -82,14 +83,14 @@ draw_body :: proc(
 			for i in 0 ..< vertex_count {
 				startV := polygon_shape.vertices[i]
 				screenStartV := rl.Vector2 {
-					body_x + startV.x * PHYSICS_SCALE,
-					body_y + startV.y * PHYSICS_SCALE,
+					body_x + meters_to_render(startV.x),
+					body_y + meters_to_render(startV.y),
 				}
 				j := (i + 1) % vertex_count
 				endV := polygon_shape.vertices[j]
 				screenEndV := rl.Vector2 {
-					body_x + endV.x * PHYSICS_SCALE,
-					body_y + endV.y * PHYSICS_SCALE,
+					body_x + meters_to_render(endV.x),
+					body_y + meters_to_render(endV.y),
 				}
 				rl.DrawLineV(screenStartV, screenEndV, rl.BLACK)
 			}
@@ -111,11 +112,11 @@ draw_body :: proc(
 		}
 
 		// Draw a small indicator circle
-		rl.DrawCircleV(rl.Vector2{body_x, body_y}, 3, debug_color)
+		rl.DrawCircleV(rl.Vector2{body_x, body_y}, DEBUG_BODY_MARKER_RADIUS, debug_color)
 
 		// Draw sensor indicator if it's a sensor
 		if b2.Shape_IsSensor(shape[0]) {
-			rl.DrawCircleLines(cast(i32)body_x, cast(i32)body_y, 5, DEBUG_COLOR_SENSOR)
+			rl.DrawCircleLines(cast(i32)body_x, cast(i32)body_y, DEBUG_SENSOR_RADIUS, DEBUG_COLOR_SENSOR)
 		}
 	}
 }

@@ -93,6 +93,17 @@ draw_debug_info :: proc(renderer: ^Renderer, last_text_line: i32) {
 		)
 	}
 
+	// Draw the current camera zoom
+	zoom_text := fmt.tprintf("Zoom: %.2fx (scroll / R reset)", renderer.camera.zoom)
+	zoom_line := last_text_line + i32(len(entities)) * LINE_SPACING
+	rl.DrawText(
+		strings.clone_to_cstring(zoom_text, context.temp_allocator),
+		10,
+		zoom_line,
+		20,
+		rl.DARKGRAY,
+	)
+
 	// Draw the current tower tuning values
 	tower := renderer.world.tower
 	shots_per_second := f32(0)
@@ -102,12 +113,12 @@ draw_debug_info :: proc(renderer: ^Renderer, last_text_line: i32) {
 
 	tuning := [4]string {
 		fmt.tprintf("Damage: %d", tower.damage),
-		fmt.tprintf("Range: %.0f", tower.range),
+		fmt.tprintf("Range: %.1f m", tower.range),
 		fmt.tprintf("Cooldown: %.2f s (%.1f shots/s)", tower.cooldown, shots_per_second),
 		"F2: tower tuning",
 	}
 
-	next_line := last_text_line + i32(len(entities)) * LINE_SPACING
+	next_line := zoom_line + LINE_SPACING
 	for text, index in tuning {
 		rl.DrawText(
 			strings.clone_to_cstring(text, context.temp_allocator),

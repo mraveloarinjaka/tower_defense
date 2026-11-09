@@ -58,12 +58,12 @@ draw_tower_panel :: proc(renderer: ^Renderer) {
 	)
 	tower.damage = int(damage)
 
-	// Range is only gameplay data: the range circle is redrawn from it
+	// Range is gameplay data in meters; the range circle is redrawn from it
 	range := tower.range
 	rl.GuiSliderBar(
 		tuning_row(1),
 		"Range",
-		rl.TextFormat("%.0f px", range),
+		rl.TextFormat("%.1f m", range),
 		&range,
 		game.MIN_TOWER_RANGE,
 		game.MAX_TOWER_RANGE,
