@@ -10,22 +10,27 @@ import "core:time"
 import rl "vendor:raylib"
 
 // Game constants
-SCREEN_WIDTH :: 1024
-SCREEN_HEIGHT :: 768
+SCREEN_WIDTH :: 1024 // Window/UI width in px
+SCREEN_HEIGHT :: 768 // Window/UI height in px
 TITLE :: "Tower Defense Game"
 TARGET_FPS :: 60
+
+// World-space arena dimensions in meters
+WORLD_WIDTH :: 68.0
+WORLD_HEIGHT :: 50.0
+SPAWN_MARGIN :: 0.6666667
 
 // Tower defaults
 DEFAULT_TOWER_HEALTH :: 100
 DEFAULT_TOWER_DAMAGE :: 10
-DEFAULT_TOWER_RANGE :: 150.0
+DEFAULT_TOWER_RANGE :: 5.0 // meters
 DEFAULT_TOWER_COOLDOWN :: 1.0
 
 // Tower tuning limits, used to keep interactive edits playable
 MIN_TOWER_DAMAGE :: 1
 MAX_TOWER_DAMAGE :: 1000
-MIN_TOWER_RANGE :: 20.0
-MAX_TOWER_RANGE :: 600.0
+MIN_TOWER_RANGE :: 0.6666667 // meters
+MAX_TOWER_RANGE :: 20.0 // meters
 MIN_TOWER_COOLDOWN :: 0.05
 MAX_TOWER_COOLDOWN :: 3.0
 
@@ -45,9 +50,13 @@ TowerType :: enum {
 	BASIC,
 }
 
-TOWER_RADIUS :: 20.0 // Collision radius of the tower body (px)
-ORBIT_GAP_MIN :: 6.0 // Min extra clearance between enemy edge and tower edge while orbiting (px)
-ORBIT_ENGAGE_RANGE :: 40.0 // Enemies switch to orbiting once within this distance of the ring (px)
+TOWER_RADIUS :: 1.0 // Collision radius of the tower body (m)
+ORBIT_GAP_MIN :: 0.2 // Min extra clearance between enemy edge and tower edge while orbiting (m)
+ORBIT_ENGAGE_RANGE :: 2.0 // Enemies switch to orbiting once within this distance of the ring (m)
+
+// Projectile defaults
+PROJECTILE_RADIUS :: 0.1666667 // Collision radius (m)
+PROJECTILE_THRUST_N :: 200.0 // Propulsion force (N)
 
 // Enemy structure
 Enemy :: struct {
@@ -55,11 +64,12 @@ Enemy :: struct {
 	type:            EnemyType,
 	health:          int,
 	max_health:      int,
-	speed:           f32,
+	thrust_n:        f32, // Propulsion force used when chasing (N)
+	orbit_speed_mps: f32, // Tangential orbit speed (m/s)
 	damage:          int,
 	active:          bool,
 	value:           int, // Score value when defeated
-	radius:          f32, // Collision radius (px)
+	radius:          f32, // Collision radius (m)
 	orbit_direction: f32, // +1 or -1, chosen at spawn
 	orbit_mix:       f32, // 0..1, where the orbit ring sits between min clearance and tower range
 	orbiting:        bool, // True once the enemy has reached the orbit ring
@@ -72,21 +82,21 @@ Tower :: struct {
 	health:         int,
 	max_health:     int,
 	damage:         int,
-	range:          f32,
+	range:          f32, // Targeting range (m)
 	cooldown:       f32,
 	cooldown_timer: f32,
-	center:         [2]f32,
-	radius:         f32,
+	center:         [2]f32, // World position (m)
+	radius:         f32, // Collision radius (m)
 	target:         string, // ID of the current target enemy
 }
 
 // Projectile structure
 Projectile :: struct {
-	id:     string,
-	damage: int,
-	speed:  f32,
-	target: string, // ID of the target enemy
-	active: bool,
+	id:       string,
+	damage:   int,
+	thrust_n: f32, // Propulsion force (N)
+	target:   string, // ID of the target enemy
+	active:   bool,
 }
 
 // Game context
@@ -114,11 +124,11 @@ init_game :: proc() -> Game {
 	// Initialize physics
 	game.physics = physics.init_physics()
 
-	// Create game boundaries
-	physics.create_boundaries(&game.physics, SCREEN_WIDTH, SCREEN_HEIGHT)
+	// Create game boundaries (world meters)
+	physics.create_boundaries(&game.physics, WORLD_WIDTH, WORLD_HEIGHT)
 
-	// Initialize tower
-	game.tower = create_tower(&game, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2)
+	// Initialize tower at the arena center (world meters)
+	game.tower = create_tower(&game, WORLD_WIDTH / 2.0, WORLD_HEIGHT / 2.0)
 
 	// Initialize enemies array
 	game.enemies = make([dynamic]Enemy)
@@ -165,6 +175,7 @@ create_tower :: proc(game: ^Game, x, y: f32) -> Tower {
 	tower.range = DEFAULT_TOWER_RANGE
 	tower.cooldown = DEFAULT_TOWER_COOLDOWN
 	tower.cooldown_timer = 0
+	tower.center = {x, y}
 	tower.radius = TOWER_RADIUS
 
 	// Create physics body for tower
@@ -210,26 +221,29 @@ create_enemy :: proc(game: ^Game, x, y: f32, type: EnemyType) -> Enemy {
 	case .BASIC:
 		enemy.health = 30
 		enemy.max_health = 30
-		enemy.speed = 50
+		enemy.thrust_n = 50.0
+		enemy.orbit_speed_mps = 1.6666667
 		enemy.damage = 5
 		enemy.value = 10
-		physics_radius = 10
+		physics_radius = 0.3333333
 
 	case .FAST:
 		enemy.health = 15
 		enemy.max_health = 15
-		enemy.speed = 80
+		enemy.thrust_n = 80.0
+		enemy.orbit_speed_mps = 2.6666667
 		enemy.damage = 3
 		enemy.value = 15
-		physics_radius = 8
+		physics_radius = 0.2666667
 
 	case .TANK:
 		enemy.health = 60
 		enemy.max_health = 60
-		enemy.speed = 30
+		enemy.thrust_n = 30.0
+		enemy.orbit_speed_mps = 1.0
 		enemy.damage = 10
 		enemy.value = 20
-		physics_radius = 15
+		physics_radius = 0.5
 	}
 	physics.create_enemy(&game.physics, enemy.id, {x, y}, physics_radius)
 
@@ -255,12 +269,12 @@ create_projectile :: proc(game: ^Game, source, target: string, damage: int) -> P
 	game.projectile_count += 1
 	projectile.id = strings.clone(fmt.tprintf("projectile_%d", game.projectile_count))
 	projectile.damage = damage
-	projectile.speed = 200
+	projectile.thrust_n = PROJECTILE_THRUST_N
 	projectile.target = target
 	projectile.active = true
 
 	source_x, source_y := physics.get_body_position(&game.physics, source)
-	physics.create_projectile(&game.physics, projectile.id, {source_x, source_y}, 5)
+	physics.create_projectile(&game.physics, projectile.id, {source_x, source_y}, PROJECTILE_RADIUS)
 
 	return projectile
 }
@@ -359,12 +373,12 @@ update_enemies :: proc(game: ^Game, collisions: physics.Colliding, delta_time: f
 
 		// Approach until within engage distance of the orbit ring, then orbit forever
 		// Ring radius is random between touching-plus-gap and the tower's range
-		orbit_min_px := game.tower.radius + enemy.radius + ORBIT_GAP_MIN
-		orbit_max_px := max(orbit_min_px, game.tower.range)
-		orbit_radius_px := orbit_min_px + enemy.orbit_mix * (orbit_max_px - orbit_min_px)
+		orbit_min_m := game.tower.radius + enemy.radius + ORBIT_GAP_MIN
+		orbit_max_m := max(orbit_min_m, game.tower.range)
+		orbit_radius_m := orbit_min_m + enemy.orbit_mix * (orbit_max_m - orbit_min_m)
 		if !enemy.orbiting {
-			dist_px := physics.distance(&game.physics, enemy.id, game.tower.id)
-			if dist_px <= orbit_radius_px + ORBIT_ENGAGE_RANGE {
+			dist_m := physics.distance(&game.physics, enemy.id, game.tower.id)
+			if dist_m <= orbit_radius_m + ORBIT_ENGAGE_RANGE {
 				enemy.orbiting = true
 			}
 		}
@@ -374,12 +388,12 @@ update_enemies :: proc(game: ^Game, collisions: physics.Colliding, delta_time: f
 				&game.physics,
 				enemy.id,
 				game.tower.id,
-				orbit_radius_px / physics.PHYSICS_SCALE,
-				enemy.speed / physics.PHYSICS_SCALE,
+				orbit_radius_m,
+				enemy.orbit_speed_mps,
 				enemy.orbit_direction,
 			)
 		} else {
-			physics.move_body_towards(&game.physics, enemy.id, game.tower.id, enemy.speed)
+			physics.move_body_towards(&game.physics, enemy.id, game.tower.id, enemy.thrust_n)
 		}
 
 		//// Check collision with tower
@@ -436,7 +450,7 @@ update_projectiles :: proc(game: ^Game, collisions: physics.Colliding, delta_tim
 			&game.physics,
 			projectile.id,
 			projectile.target,
-			projectile.speed,
+			projectile.thrust_n,
 		)
 	}
 
@@ -457,27 +471,27 @@ update_projectiles :: proc(game: ^Game, collisions: physics.Colliding, delta_tim
 
 // Spawn a new enemy
 spawn_enemy :: proc(game: ^Game) {
-	// Determine spawn position (random position along the edges)
+	// Determine spawn position (random position along the edges, world meters)
 	side := rand.int_max(4)
 	x, y: f32
 
 	switch side {
 	case 0:
 		// Top
-		x = f32(rand.int_max(SCREEN_WIDTH))
-		y = 20
+		x = rand.float32_range(0, WORLD_WIDTH)
+		y = SPAWN_MARGIN
 	case 1:
 		// Right
-		x = SCREEN_WIDTH - 20
-		y = f32(rand.int_max(SCREEN_HEIGHT))
+		x = WORLD_WIDTH - SPAWN_MARGIN
+		y = rand.float32_range(0, WORLD_HEIGHT)
 	case 2:
 		// Bottom
-		x = f32(rand.int_max(SCREEN_WIDTH))
-		y = SCREEN_HEIGHT - 20
+		x = rand.float32_range(0, WORLD_WIDTH)
+		y = WORLD_HEIGHT - SPAWN_MARGIN
 	case 3:
 		// Left
-		x = 20
-		y = f32(rand.int_max(SCREEN_HEIGHT))
+		x = SPAWN_MARGIN
+		y = rand.float32_range(0, WORLD_HEIGHT)
 	}
 
 	// Pick a random enemy type from all available types

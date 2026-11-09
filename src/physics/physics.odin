@@ -5,11 +5,12 @@ import "core:math"
 
 import b2 "vendor:box2d"
 
-PHYSICS_SCALE :: 30.0 // Pixels per meter for b2
+PHYSICS_SCALE :: 30.0 // Pixels per meter; used by the render layer only
 VELOCITY_ITERATIONS :: 4
 POSITION_ITERATIONS :: 2
 
-ScreenPosition :: [2]f32
+// A world-space position in meters. Physics never deals in pixels.
+WorldPosition :: [2]f32
 
 PhysicsWorld :: struct {
 	world:       b2.WorldId,
@@ -54,19 +55,16 @@ update_physics :: proc(physics: ^PhysicsWorld, time_step: f32) {
 	)
 }
 
-// Create a static body (for walls, obstacles, tower base)
-toWorldPosition :: proc(position: ScreenPosition) -> b2.Vec2 {
-	return b2.Vec2{position.x / PHYSICS_SCALE, position.y / PHYSICS_SCALE}
-}
-
+// Create a static body (for walls, obstacles, tower base).
+// extent is the body center in meters; width and height are in meters.
 create_static_body :: proc(
 	physics: ^PhysicsWorld,
-	extent: ScreenPosition,
+	extent: WorldPosition,
 	width, height: f32,
 ) -> b2.BodyId {
 	body_def := b2.DefaultBodyDef()
 	body_def.type = .staticBody
-	body_def.position = toWorldPosition(extent)
+	body_def.position = b2.Vec2{extent.x, extent.y}
 
 	body := b2.CreateBody(physics.world, body_def)
 
@@ -77,23 +75,24 @@ create_static_body :: proc(
 
 	body_shape_def.filter.categoryBits = u64(bit_set[BodyType]{.WALL})
 
-	box := b2.MakeBox(width / (2 * PHYSICS_SCALE), height / (2 * PHYSICS_SCALE))
+	box := b2.MakeBox(width / 2.0, height / 2.0)
 	box_shape := b2.CreatePolygonShape(body, body_shape_def, box)
 
 	return body
 }
 
-// Create a circular static body (for tower)
+// Create a circular static body (for tower).
+// center is in meters; radius is in meters.
 create_static_circle :: proc(
 	physics: ^PhysicsWorld,
 	name: string,
-	center: ScreenPosition,
+	center: WorldPosition,
 	radius: f32,
 ) -> b2.BodyId {
 	// Create body definition
 	body_def := b2.DefaultBodyDef()
 	body_def.type = .staticBody
-	body_def.position = toWorldPosition(center)
+	body_def.position = b2.Vec2{center.x, center.y}
 
 	// Create body
 	body := b2.CreateBody(physics.world, body_def)
@@ -104,7 +103,7 @@ create_static_circle :: proc(
 	body_shape_def.material.restitution = 0.1 // Slight bounce
 
 	// Create circle shape
-	circle := b2.Circle{body_def.position, radius / PHYSICS_SCALE}
+	circle := b2.Circle{body_def.position, radius}
 	circle_shape := b2.CreateCircleShape(body, body_shape_def, circle)
 
 	return body
@@ -116,17 +115,18 @@ BodyType :: enum {
 	PROJECTILE,
 }
 
-// Create a dynamic body (for enemies)
+// Create a dynamic body (for enemies).
+// position is in meters; radius is in meters.
 create_dynamic_body :: proc(
 	physics: ^PhysicsWorld,
 	categoryBits: u64,
 	maskBits: u64,
-	position: ScreenPosition,
+	position: WorldPosition,
 	radius: f32,
 ) -> b2.BodyId {
 	body_def := b2.DefaultBodyDef()
 	body_def.type = .dynamicBody
-	body_def.position = toWorldPosition(position)
+	body_def.position = b2.Vec2{position.x, position.y}
 	body_def.linearDamping = 0.5 // Add some damping to prevent excessive sliding
 
 	body := b2.CreateBody(physics.world, body_def)
@@ -141,7 +141,7 @@ create_dynamic_body :: proc(
 	body_shape_def.filter.categoryBits = categoryBits
 	body_shape_def.filter.maskBits = maskBits
 
-	circle := b2.Circle{body_def.position, radius / PHYSICS_SCALE}
+	circle := b2.Circle{body_def.position, radius}
 	circle_shape := b2.CreateCircleShape(body, body_shape_def, circle)
 
 	return body
@@ -150,7 +150,7 @@ create_dynamic_body :: proc(
 create_projectile :: proc(
 	physics: ^PhysicsWorld,
 	name: string,
-	position: ScreenPosition,
+	position: WorldPosition,
 	radius: f32,
 ) -> b2.BodyId {
 	body := create_dynamic_body(
@@ -168,7 +168,7 @@ create_projectile :: proc(
 create_enemy :: proc(
 	physics: ^PhysicsWorld,
 	name: string,
-	position: ScreenPosition,
+	position: WorldPosition,
 	radius: f32,
 ) -> b2.BodyId {
 	body := create_dynamic_body(
@@ -187,7 +187,7 @@ create_enemy :: proc(
 //create_sensor :: proc(physics: ^PhysicsWorld, name: string, x, y, radius: f32) -> b2.BodyId {
 //   body_def := b2.DefaultBodyDef()
 //   body_def.type = .staticBody
-//   body_def.position = b2.Vec2{x / PHYSICS_SCALE, y / PHYSICS_SCALE}
+//   body_def.position = b2.Vec2{x, y} // meters
 
 //   body := b2.CreateBody(physics.world, body_def)
 
@@ -201,7 +201,7 @@ create_enemy :: proc(
 //   circle_shape := b2.CreateCircleShape(
 //      body,
 //      shape_def,
-//      b2.Circle{{0, 0}, radius / PHYSICS_SCALE},
+//      b2.Circle{{0, 0}, radius}, // meters
 //   )
 
 //   physics.bodies[name] = body
@@ -209,12 +209,14 @@ create_enemy :: proc(
 //   return body
 //}
 
-// Apply force to move a body towards a target
+// Apply a force in Newtons to move a body towards a target.
+// Positions are read in meters; force_n is a force in N (Box2D native), so it is
+// applied as-is with no PHYSICS_SCALE conversion.
 move_body_towards :: proc(
 	physics: ^PhysicsWorld,
 	body_name: string,
 	target_name: string,
-	force_magnitude: f32,
+	force_n: f32,
 ) {
 	body, body_exists := physics.bodies[body_name]
 	_, target_exists := physics.bodies[target_name]
@@ -239,7 +241,7 @@ move_body_towards :: proc(
 	}
 
 	// Apply force
-	force := b2.Vec2{dir_x * force_magnitude, dir_y * force_magnitude}
+	force := b2.Vec2{dir_x * force_n, dir_y * force_n}
 	b2.Body_ApplyForceToCenter(body, force, true)
 }
 
@@ -289,7 +291,7 @@ orbit_body_around :: proc(
 	b2.Body_SetLinearVelocity(body, v)
 }
 
-// Get position of a body
+// Get position of a body in world meters
 get_body_position :: proc(physics: ^PhysicsWorld, body_name: string) -> (x, y: f32) {
 	body, exists := physics.bodies[body_name]
 	if !exists {
@@ -297,10 +299,10 @@ get_body_position :: proc(physics: ^PhysicsWorld, body_name: string) -> (x, y: f
 	}
 
 	position := b2.Body_GetPosition(body)
-	return position.x * PHYSICS_SCALE, position.y * PHYSICS_SCALE
+	return position.x, position.y
 }
 
-// Calculate distance between two bodies
+// Calculate distance in meters between two bodies
 calculate_distance :: proc(physics: ^PhysicsWorld, body_name_a, body_name_b: string) -> f32 {
 	x1, y1 := get_body_position(physics, body_name_a)
 	x2, y2 := get_body_position(physics, body_name_b)
@@ -311,8 +313,7 @@ calculate_distance :: proc(physics: ^PhysicsWorld, body_name_a, body_name_b: str
 	return math.sqrt(dx * dx + dy * dy)
 }
 
-// Create boundary walls for the game area
-
+// Create boundary walls for the game area.
 Location :: enum {
 	TOP,
 	BOTTOM,
@@ -327,40 +328,42 @@ WALLS: [Location]string = {
 	.RIGHT  = "wall_right",
 }
 
-create_boundaries :: proc(physics: ^PhysicsWorld, width, height: f32) {
-	wall_thickness :: 10
+// width and height are world dimensions in meters; WALL_THICKNESS is in meters.
+WALL_THICKNESS :: 0.3333
 
+create_boundaries :: proc(physics: ^PhysicsWorld, width, height: f32) {
 	physics.bodies[WALLS[.TOP]] = create_static_body(
 		physics,
-		{width / 2, wall_thickness / 2},
+		{width / 2, WALL_THICKNESS / 2},
 		width,
-		wall_thickness,
+		WALL_THICKNESS,
 	)
 
 	physics.bodies[WALLS[.BOTTOM]] = create_static_body(
 		physics,
-		{width / 2, height - (wall_thickness / 2)},
+		{width / 2, height - (WALL_THICKNESS / 2)},
 		width,
-		wall_thickness,
+		WALL_THICKNESS,
 	)
 
 	physics.bodies[WALLS[.LEFT]] = create_static_body(
 		physics,
-		{wall_thickness / 2, height / 2},
-		wall_thickness,
+		{WALL_THICKNESS / 2, height / 2},
+		WALL_THICKNESS,
 		height,
 	)
 
 	physics.bodies[WALLS[.RIGHT]] = create_static_body(
 		physics,
-		{width - (wall_thickness / 2), height / 2},
-		wall_thickness,
+		{width - (WALL_THICKNESS / 2), height / 2},
+		WALL_THICKNESS,
 		height,
 	)
 }
 
-create_tower :: proc(physics: ^PhysicsWorld, name: string, center: ScreenPosition, radius: f32) {
-	physics.bodies[name] = create_static_circle(physics, name, center, 20)
+// center and radius are in meters.
+create_tower :: proc(physics: ^PhysicsWorld, name: string, center: WorldPosition, radius: f32) {
+	physics.bodies[name] = create_static_circle(physics, name, center, radius)
 }
 
 // Remove a body from the physics world
@@ -372,6 +375,7 @@ remove_body :: proc(physics: ^PhysicsWorld, body_name: string) {
 	}
 }
 
+// Distance in meters between two named bodies.
 distance :: proc(world: ^PhysicsWorld, from, to: string) -> f32 {
 	// Get tower position
 	from_x, from_y := get_body_position(world, from)
