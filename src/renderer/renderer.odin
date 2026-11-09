@@ -67,6 +67,11 @@ MIN_CAMERA_ZOOM :: 0.25
 MAX_CAMERA_ZOOM :: 4.0
 CAMERA_ZOOM_STEP :: 0.125
 
+// Arrow-key pan speed in screen pixels per second at 1.0x zoom. The applied
+// render-space step is divided by the camera zoom so on-screen speed is
+// consistent at every zoom level.
+CAMERA_PAN_SPEED :: 500.0
+
 // Renderer context
 Renderer :: struct {
 	world:         ^game.Game,
@@ -133,6 +138,47 @@ update_camera_zoom :: proc(renderer: ^Renderer) {
 		MIN_CAMERA_ZOOM,
 		MAX_CAMERA_ZOOM,
 	)
+}
+
+// Arrow-key camera panning during gameplay.
+// Held arrow keys pan the world camera at a frame-rate-independent speed that
+// is divided by the camera zoom, so on-screen motion stays constant across zoom
+// levels. Diagonal input is normalized to cardinal speed. The viewport center
+// (not the raw camera target) is clamped to the arena bounds, which keeps the
+// bounds correct even after cursor-anchored zoom moved camera.offset/target.
+update_camera_pan :: proc(renderer: ^Renderer, delta_time: f32) {
+	if renderer.world == nil || renderer.world.state != .PLAYING {
+		return
+	}
+
+	dir: rl.Vector2
+	if rl.IsKeyDown(.LEFT) {dir.x -= 1.0}
+	if rl.IsKeyDown(.RIGHT) {dir.x += 1.0}
+	if rl.IsKeyDown(.UP) {dir.y -= 1.0}
+	if rl.IsKeyDown(.DOWN) {dir.y += 1.0}
+
+	// Normalize so diagonal panning is not sqrt(2) faster than cardinal.
+	// Zero input leaves dir at zero, so no pan step is applied this frame.
+	len := math.sqrt(dir.x * dir.x + dir.y * dir.y)
+	if len > 0 {
+		dir.x /= len
+		dir.y /= len
+	}
+
+	step := (CAMERA_PAN_SPEED / renderer.camera.zoom) * delta_time
+	renderer.camera.target += dir * step
+
+	// Clamp the viewport center to the arena on every .PLAYING frame, not only
+	// while an arrow is held. Deriving it from the camera transform handles
+	// non-centered offsets left by cursor-anchored zoom.
+	screen_center := rl.Vector2{f32(game.SCREEN_WIDTH) / 2.0, f32(game.SCREEN_HEIGHT) / 2.0}
+	world_max := world_to_render(game.WORLD_WIDTH, game.WORLD_HEIGHT)
+	view_center := rl.GetScreenToWorld2D(screen_center, renderer.camera)
+	clamped_center := rl.Vector2 {
+		clamp(view_center.x, 0, world_max.x),
+		clamp(view_center.y, 0, world_max.y),
+	}
+	renderer.camera.target += clamped_center - view_center
 }
 
 // Begin rendering frame. Screen-space drawing only; world geometry must be

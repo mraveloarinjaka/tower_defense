@@ -41,11 +41,12 @@ main :: proc() {
 			renderer.toggle_tower_panel(&game_renderer)
 		}
 
-		renderer.update_camera_zoom(&game_renderer)
-
 		delta_time := rl.GetFrameTime()
 
 		game.update_game(&game_state, delta_time)
+
+		renderer.update_camera_zoom(&game_renderer)
+		renderer.update_camera_pan(&game_renderer, delta_time)
 
 		renderer.draw_game(&game_renderer)
 
