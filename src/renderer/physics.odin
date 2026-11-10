@@ -75,8 +75,7 @@ draw_body :: proc(
 	case .polygonShape:
 		polygon_shape := b2.Shape_GetPolygon(shape[0])
 		polygon_transform := b2.Body_GetTransform(body)
-		//vertex_count := polygon_shape.count
-		vertex_count := 4
+		vertex_count := polygon_shape.count
 
 		if vertex_count > 0 {
 			// Draw polygon
@@ -92,7 +91,7 @@ draw_body :: proc(
 					body_x + meters_to_render(endV.x),
 					body_y + meters_to_render(endV.y),
 				}
-				rl.DrawLineV(screenStartV, screenEndV, rl.BLACK)
+				rl.DrawLineV(screenStartV, screenEndV, color)
 			}
 		}
 	}

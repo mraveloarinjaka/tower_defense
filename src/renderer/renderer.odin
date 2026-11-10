@@ -273,10 +273,10 @@ draw_projectile :: proc(renderer: ^Renderer, body_name: string) {
 
 // Draw game boundaries
 draw_boundaries :: proc(renderer: ^Renderer) {
-	draw_body(renderer, physics.WALLS[.TOP], rl.DARKGRAY)
-	draw_body(renderer, physics.WALLS[.BOTTOM], rl.DARKGRAY)
-	draw_body(renderer, physics.WALLS[.LEFT], rl.DARKGRAY)
-	draw_body(renderer, physics.WALLS[.RIGHT], rl.DARKGRAY)
+	draw_body(renderer, physics.WALLS[.TOP], rl.BLACK)
+	draw_body(renderer, physics.WALLS[.BOTTOM], rl.BLACK)
+	draw_body(renderer, physics.WALLS[.LEFT], rl.BLACK)
+	draw_body(renderer, physics.WALLS[.RIGHT], rl.BLACK)
 }
 
 // Toggle debug mode
