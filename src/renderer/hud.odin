@@ -1,7 +1,6 @@
 package renderer
 
 import "../game"
-import "core:c"
 import "core:fmt"
 import "core:strings"
 import rl "vendor:raylib"
@@ -9,46 +8,22 @@ import rl "vendor:raylib"
 // Vertical spacing between debug text lines
 LINE_SPACING :: 30
 
-// Draw the UI
-draw_hud :: proc(renderer: ^Renderer) {
-	// Draw score
-	score_text := fmt.tprintf("Score: %d", renderer.world.score)
-	rl.DrawText(strings.clone_to_cstring(score_text), 10, 10, 20, rl.DARKGRAY)
+// Draw a single line of HUD text at the given screen position
+draw_text_line :: proc(text: string, x, y: i32, color: rl.Color = rl.DARKGRAY) {
+	c_text := strings.clone_to_cstring(text, context.temp_allocator)
+	rl.DrawText(c_text, x, y, 20, color)
+}
 
-	// Draw wave
-	wave_text := fmt.tprintf("Wave: %d", renderer.world.wave)
-	rl.DrawText(strings.clone_to_cstring(wave_text), 10, 40, 20, rl.DARKGRAY)
-
-	// Draw lives
-	lives_text := fmt.tprintf("Lives: %d", renderer.world.lives)
-	rl.DrawText(strings.clone_to_cstring(lives_text), 10, 70, 20, rl.DARKGRAY)
-
-	// Draw tower health
-	health_text := fmt.tprintf(
-		"Tower Health: %d/%d",
-		renderer.world.tower.health,
-		renderer.world.tower.max_health,
-	)
-	rl.DrawText(
-		strings.clone_to_cstring(health_text),
-		game.SCREEN_WIDTH - 200,
-		10,
-		20,
-		rl.DARKGRAY,
-	)
-
-	// Draw health bar
-	bar_width := 180
-	bar_height := 10
-	bar_x := game.SCREEN_WIDTH - 200
-	bar_y := 40
-
+// Draw a health bar: gray background plus a color-coded fill
+draw_health_bar :: proc(x, y, width, height: i32, health, max_health: int) {
 	// Background (empty) health bar
-	rl.DrawRectangle(c.int(bar_x), c.int(bar_y), c.int(bar_width), c.int(bar_height), rl.GRAY)
+	rl.DrawRectangle(x, y, width, height, rl.GRAY)
 
-	// Filled health bar
-	health_percent := f32(renderer.world.tower.health) / f32(renderer.world.tower.max_health)
-	filled_width := i32(f32(bar_width) * health_percent)
+	// Guard against division by zero when there is no maximum health
+	health_percent: f32 = 0
+	if max_health > 0 {
+		health_percent = f32(health) / f32(max_health)
+	}
 
 	// Color based on health percentage
 	health_color: rl.Color
@@ -60,7 +35,42 @@ draw_hud :: proc(renderer: ^Renderer) {
 		health_color = rl.RED
 	}
 
-	rl.DrawRectangle(c.int(bar_x), c.int(bar_y), filled_width, c.int(bar_height), health_color)
+	// Filled health bar
+	filled_width := i32(f32(width) * health_percent)
+	rl.DrawRectangle(x, y, filled_width, height, health_color)
+}
+
+// Draw the UI
+draw_hud :: proc(renderer: ^Renderer) {
+	// Draw score
+	score_text := fmt.tprintf("Score: %d", renderer.world.score)
+	draw_text_line(score_text, 10, 10)
+
+	// Draw wave
+	wave_text := fmt.tprintf("Wave: %d", renderer.world.wave)
+	draw_text_line(wave_text, 10, 40)
+
+	// Draw lives
+	lives_text := fmt.tprintf("Lives: %d", renderer.world.lives)
+	draw_text_line(lives_text, 10, 70)
+
+	// Draw tower health
+	health_text := fmt.tprintf(
+		"Tower Health: %d/%d",
+		renderer.world.tower.health,
+		renderer.world.tower.max_health,
+	)
+	draw_text_line(health_text, game.SCREEN_WIDTH - 200, 10)
+
+	// Draw health bar
+	draw_health_bar(
+		game.SCREEN_WIDTH - 200,
+		40,
+		180,
+		10,
+		renderer.world.tower.health,
+		renderer.world.tower.max_health,
+	)
 
 	// Draw debug info if enabled
 	draw_debug_info(renderer, 100)
@@ -84,25 +94,13 @@ draw_debug_info :: proc(renderer: ^Renderer, last_text_line: i32) {
 	for entity, index in entities {
 		text := fmt.tprintf("%s: %d", entity.label, entity.value)
 		y := last_text_line + i32(index) * LINE_SPACING
-		rl.DrawText(
-			strings.clone_to_cstring(text, context.temp_allocator),
-			10,
-			y,
-			20,
-			rl.DARKGRAY,
-		)
+		draw_text_line(text, 10, y)
 	}
 
 	// Draw the current camera zoom
 	zoom_text := fmt.tprintf("Zoom: %.2fx (scroll / R reset)", renderer.camera.zoom)
 	zoom_line := last_text_line + i32(len(entities)) * LINE_SPACING
-	rl.DrawText(
-		strings.clone_to_cstring(zoom_text, context.temp_allocator),
-		10,
-		zoom_line,
-		20,
-		rl.DARKGRAY,
-	)
+	draw_text_line(zoom_text, 10, zoom_line)
 
 	// Draw the current tower tuning values
 	tower := renderer.world.tower
@@ -120,13 +118,7 @@ draw_debug_info :: proc(renderer: ^Renderer, last_text_line: i32) {
 
 	next_line := zoom_line + LINE_SPACING
 	for text, index in tuning {
-		rl.DrawText(
-			strings.clone_to_cstring(text, context.temp_allocator),
-			10,
-			next_line + i32(index) * LINE_SPACING,
-			20,
-			rl.DARKGRAY,
-		)
+		draw_text_line(text, 10, next_line + i32(index) * LINE_SPACING)
 	}
 
 	// Draw FPS
