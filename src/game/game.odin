@@ -274,6 +274,20 @@ create_projectile :: proc(game: ^Game, source, target: string, damage: int) -> P
 	projectile.active = true
 
 	source_x, source_y := physics.get_body_position(&game.physics, source)
+	target_x, target_y := physics.get_body_position(&game.physics, target)
+
+	// Spawn at the rim of the firing tower, toward the target, so the
+	// projectile body starts outside the tower's collision circle instead
+	// of embedded inside it.
+	dx := target_x - source_x
+	dy := target_y - source_y
+	target_distance := math.sqrt(dx * dx + dy * dy)
+	if target_distance > 0 {
+		rim_fraction := (game.tower.radius + PROJECTILE_RADIUS) / target_distance
+		source_x += dx * rim_fraction
+		source_y += dy * rim_fraction
+	}
+
 	physics.create_projectile(&game.physics, projectile.id, {source_x, source_y}, PROJECTILE_RADIUS)
 
 	return projectile
@@ -413,7 +427,8 @@ update_enemies :: proc(game: ^Game, collisions: physics.Colliding, delta_time: f
 	// Remove inactive enemies
 	i := 0
 	for i < len(game.enemies) {
-		if !game.enemies[i].active {
+		if enemy := game.enemies[i]; !enemy.active {
+			physics.remove_body(&game.physics, enemy.id)
 			unordered_remove(&game.enemies, i)
 		} else {
 			i += 1

@@ -103,7 +103,7 @@ create_static_circle :: proc(
 	body_shape_def.material.restitution = 0.1 // Slight bounce
 
 	// Create circle shape
-	circle := b2.Circle{body_def.position, radius}
+	circle := b2.Circle{{0, 0}, radius}
 	circle_shape := b2.CreateCircleShape(body, body_shape_def, circle)
 
 	return body
@@ -141,7 +141,7 @@ create_dynamic_body :: proc(
 	body_shape_def.filter.categoryBits = categoryBits
 	body_shape_def.filter.maskBits = maskBits
 
-	circle := b2.Circle{body_def.position, radius}
+	circle := b2.Circle{{0, 0}, radius}
 	circle_shape := b2.CreateCircleShape(body, body_shape_def, circle)
 
 	return body
@@ -370,8 +370,10 @@ create_tower :: proc(physics: ^PhysicsWorld, name: string, center: WorldPosition
 remove_body :: proc(physics: ^PhysicsWorld, body_name: string) {
 	body, exists := physics.bodies[body_name]
 	if exists {
-		b2.DestroyBody(body)
 		delete_key(&physics.bodies, body_name)
+		delete_key(&physics.projectiles, body)
+		delete_key(&physics.enemies, body)
+		b2.DestroyBody(body)
 	}
 }
 
@@ -421,7 +423,7 @@ check_collisions :: proc(physics: ^PhysicsWorld) -> Colliding {
 }
 
 // Record a collision when one body is a projectile and the other an enemy.
-// Returns true when a collision was recorded, false for non-matching body pairs.
+// Returns false when a collision was recorded, true for non-matching body pairs.
 check_projectile_x_enemy_collisions :: proc(
 	physics: ^PhysicsWorld,
 	colliding: ^Colliding,
@@ -452,7 +454,7 @@ check_projectile_x_enemy_collisions :: proc(
 }
 
 // Record a collision when one body is a projectile and the other a boundary wall.
-// Returns true when a collision was recorded, false for non-matching body pairs.
+// Returns false when a collision was recorded, true for non-matching body pairs.
 check_projectile_x_wall_collisions :: proc(
 	physics: ^PhysicsWorld,
 	colliding: ^Colliding,
